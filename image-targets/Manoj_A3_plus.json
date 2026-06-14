@@ -1,0 +1,23 @@
+{
+  "type": "PLANAR",
+  "properties": {
+    "top": 485,
+    "left": 158,
+    "width": 3959,
+    "height": 5279,
+    "isRotated": false,
+    "originalWidth": 4276,
+    "originalHeight": 6250
+  },
+  "imagePath": "image-targets/Manoj_A3_plus_luminance.jpg",
+  "metadata": null,
+  "name": "Manoj_A3_plus",
+  "resources": {
+    "originalImage": "Manoj_A3_plus_original.jpg",
+    "croppedImage": "Manoj_A3_plus_cropped.jpg",
+    "thumbnailImage": "Manoj_A3_plus_thumbnail.jpg",
+    "luminanceImage": "Manoj_A3_plus_luminance.jpg"
+  },
+  "created": 1781419184016,
+  "updated": 1781419208936
+}

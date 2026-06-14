@@ -19,7 +19,7 @@
 
     <a-assets>
       <!-- Credit to Poly by Google for the model: https://poly.google.com/view/dA5osnS0Rzj -->
-      <a-asset-item id="jelly-glb" src="assets/jellyfish-model.glb"></a-asset-item>
+
       <img id="jelly-thumb" src="assets/video-target.jpg">
       <video id="jelly-video" autoplay muted crossorigin="anonymous" loop="true" src="assets/jellyfish-video.mp4">
       </video>
@@ -39,10 +39,7 @@
     </xrextras-named-image-target>
 
     <!-- Note: "name:" must be set to the name of the image target  -->
-    <xrextras-named-image-target name="model-target">
-      <!-- Add a child entity that can be rotated independently of the image target. -->
-      <a-entity xrextras-one-finger-rotate gltf-model="#jelly-glb"></a-entity>
-    </xrextras-named-image-target>
+
 
   </a-scene>
 
