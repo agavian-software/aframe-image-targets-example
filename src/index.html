@@ -7,38 +7,34 @@
 
   <title>A-Frame: Image Targets Example</title>
   <script crossorigin="anonymous" src="./external/scripts/8frame-1.5.0.min.js"></script>
-  
-  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
-  <style>
-    #video-loader {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 1000;
-      background: rgba(0, 0, 0, 0.75);
-      color: #fff;
-      font-family: sans-serif;
-      padding: 14px 22px;
-      border-radius: 8px;
-      display: none;
-      pointer-events: none;
-      white-space: nowrap;
-    }
-  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous"
+    data-preload-chunks="slam"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js"
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js"
+    crossorigin="anonymous"></script>
 </head>
+
 <body>
   <script src="bundle.js"></script>
-  <a-scene xrextras-gesture-detector landing-page xrextras-loading xrextras-runtime-error
+
+  <div id="customLoader" role="status" aria-live="polite">
+    <div class="loaderBox">
+      <div class="brandMark" aria-hidden="true">
+        <span></span>
+      </div>
+      <div class="loaderTitle">Preparing your Magic Video</div>
+      <div class="loadingTrack" aria-hidden="true"><span></span></div>
+    </div>
+  </div>
+
+  <a-scene xrextras-gesture-detector landing-page xrextras-runtime-error
     renderer="colorManagement:true" xrweb="disableWorldTracking: true">
 
     <a-assets>
-      <!-- Credit to Poly by Google for the model: https://poly.google.com/view/dA5osnS0Rzj -->
-
       <img id="jelly-thumb" src="assets/video-target.jpg">
-      <video id="jelly-video" muted playsinline preload="metadata" crossorigin="anonymous" loop="true" src="assets/Video Project 61.mp4">
+      <video id="jelly-video" muted playsinline preload="metadata" crossorigin="anonymous" loop="true"
+        src="assets/Video Project 61.mp4">
       </video>
     </a-assets>
 
@@ -46,86 +42,18 @@
     </a-camera>
 
     <a-light type="directional" intensity="0.5" position="1 1 1"></a-light>
-
     <a-light type="ambient" intensity="1"></a-light>
 
-    <!-- Note: "name:" must be set to the name of the image target -->
     <xrextras-named-image-target name="Manoj_A3_plus">
       <a-entity xrextras-target-video-fade="video: #jelly-video; height: 1; width: 0.79;"
         geometry="primitive: plane; height: 1; width: 0.79;"></a-entity>
     </xrextras-named-image-target>
-
-    <!-- Note: "name:" must be set to the name of the image target  -->
-
-
   </a-scene>
 
-  <div id="video-loader">Loading video…</div>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var video = document.querySelector('#jelly-video');
-      var scene = document.querySelector('a-scene');
-      var loader = document.querySelector('#video-loader');
-      if (!video || !scene || !loader) {
-        return;
-      }
-
-      function showLoader(message) {
-        loader.textContent = message || 'Loading video…';
-        loader.style.display = 'block';
-      }
-
-      function hideLoader() {
-        loader.style.display = 'none';
-      }
-
-      video.pause();
-      showLoader();
-
-      video.addEventListener('loadstart', function () {
-        showLoader('Loading video…');
-      });
-
-      video.addEventListener('waiting', function () {
-        showLoader('Buffering video…');
-      });
-
-      video.addEventListener('stalled', function () {
-        showLoader('Video stalled, buffering…');
-      });
-
-      video.addEventListener('canplay', function () {
-        hideLoader();
-      });
-
-      video.addEventListener('playing', function () {
-        hideLoader();
-      });
-
-      video.addEventListener('error', function () {
-        showLoader('Video failed to load');
-      });
-
-      scene.addEventListener('xrimagefound', function (evt) {
-        if (evt.detail && evt.detail.name === 'Manoj_A3_plus') {
-          video.muted = false;
-          showLoader('Starting video…');
-          video.play().catch(function () {
-            hideLoader();
-          });
-        }
-      });
-
-      scene.addEventListener('xrimagelost', function (evt) {
-        if (evt.detail && evt.detail.name === 'Manoj_A3_plus') {
-          video.pause();
-          video.currentTime = 0;
-        }
-      });
-    });
-  </script>
-
+  <div id="videoLoader" class="videoLoader" role="status" aria-live="polite" aria-hidden="true">
+    <span class="videoSpinner" aria-hidden="true"></span>
+    <span id="videoLoaderText">Buffering video...</span>
+  </div>
 </body>
 
 </html>
