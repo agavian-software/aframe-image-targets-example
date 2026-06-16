@@ -32,10 +32,8 @@
     renderer="colorManagement:true" xrweb="disableWorldTracking: true">
 
     <a-assets>
-      <img id="jelly-thumb" src="assets/video-target.jpg">
-      <video id="jelly-video" muted playsinline preload="metadata" crossorigin="anonymous" loop="true"
-        src="assets/Video Project 61.mp4">
-      </video>
+       <a-asset-item id="jelly-glb" src="assets/child+deity+3d+model (1).glb"></a-asset-item>
+      
     </a-assets>
 
     <a-camera position="0 4 10" raycaster="objects: .cantap" cursor="fuse: false; rayOrigin: mouse;">
@@ -44,10 +42,10 @@
     <a-light type="directional" intensity="0.5" position="1 1 1"></a-light>
     <a-light type="ambient" intensity="1"></a-light>
 
+      <!-- Note: "name:" must be set to the name of the image target  -->
     <xrextras-named-image-target name="Murugar_god">
-      <a-entity
-        geometry="primitive: plane; height: 1; width: 0.74963;"
-        material="shader: flat; src: #jelly-video; side: double; repeat: 1 0.75037; offset: 0 0.12482;"></a-entity>
+      <!-- Add a child entity that can be rotated independently of the image target. -->
+      <a-entity xrextras-one-finger-rotate gltf-model="#jelly-glb" play-gltf-animations-sequentially></a-entity>
     </xrextras-named-image-target>
   </a-scene>
 
