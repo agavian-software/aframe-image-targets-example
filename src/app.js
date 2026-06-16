@@ -4,7 +4,7 @@ const onxrloaded = () => {
   XR8.XrController.configure({
     imageTargetData: [
       require('../image-targets/model-target.json'),
-      require('../image-targets/Manoj_A3_plus.json'),
+      require('../image-targets/Murugar_god.json'),
     ],
   })
 }
@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   scene.addEventListener('xrimagefound', (event) => {
-    if (!event.detail || event.detail.name !== 'Manoj_A3_plus') {
+    if (!event.detail || event.detail.name !== 'Murugar_god') {
       return
     }
 
@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   scene.addEventListener('xrimagelost', (event) => {
-    if (!event.detail || event.detail.name !== 'Manoj_A3_plus') {
+    if (!event.detail || event.detail.name !== 'Murugar_god') {
       return
     }
 

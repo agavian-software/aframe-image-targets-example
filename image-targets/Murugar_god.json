@@ -1,0 +1,23 @@
+{
+  "type": "PLANAR",
+  "properties": {
+    "top": 85,
+    "left": 0,
+    "width": 1024,
+    "height": 1365,
+    "isRotated": false,
+    "originalWidth": 1024,
+    "originalHeight": 1536
+  },
+  "imagePath": "image-targets/Murugar_god_luminance.png",
+  "metadata": null,
+  "name": "Murugar_god",
+  "resources": {
+    "originalImage": "Murugar_god_original.png",
+    "croppedImage": "Murugar_god_cropped.png",
+    "thumbnailImage": "Murugar_god_thumbnail.png",
+    "luminanceImage": "Murugar_god_luminance.png"
+  },
+  "created": 1781605471349,
+  "updated": 1781605471349
+}
