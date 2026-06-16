@@ -35,6 +35,118 @@ body {
   pointer-events: none;
 }
 
+.scanOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: max(24px, env(safe-area-inset-top)) 20px
+    max(24px, env(safe-area-inset-bottom));
+  pointer-events: none;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 180ms ease, visibility 180ms ease;
+}
+
+.scanOverlay.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.scanRegion {
+  position: relative;
+  width: min(78vw, 62vh, 600px);
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  border: 2px solid rgba(255, 255, 255, 0.72);
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.42),
+    0 12px 38px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.scanHint,
+.scanStatus {
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 15px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(5, 8, 14, 0.7);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.scanCorner {
+  position: absolute;
+  width: 35px;
+  height: 35px;
+  border-color: #fff;
+  border-style: solid;
+}
+
+.scanCornerTopLeft {
+  top: -2px;
+  left: -2px;
+  border-width: 4px 0 0 4px;
+  border-radius: 18px 0 0;
+}
+
+.scanCornerTopRight {
+  top: -2px;
+  right: -2px;
+  border-width: 4px 4px 0 0;
+  border-radius: 0 18px 0 0;
+}
+
+.scanCornerBottomLeft {
+  bottom: -2px;
+  left: -2px;
+  border-width: 0 0 4px 4px;
+  border-radius: 0 0 0 18px;
+}
+
+.scanCornerBottomRight {
+  right: -2px;
+  bottom: -2px;
+  border-width: 0 4px 4px 0;
+  border-radius: 0 0 18px;
+}
+
+.scanLine {
+  position: absolute;
+  top: 8%;
+  left: 6%;
+  width: 88%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #7fe7ff 18%, #fff 50%, #7fe7ff 82%, transparent);
+  box-shadow: 0 0 12px rgba(103, 221, 255, 0.9);
+  animation: scanLineMove 2.2s ease-in-out infinite alternate;
+}
+
+.scanSpinner {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
 .loaderBox {
   width: min(100%, 360px);
   padding: 34px 28px 30px;
@@ -167,10 +279,22 @@ body {
   }
 }
 
+@keyframes scanLineMove {
+  from {
+    top: 8%;
+  }
+
+  to {
+    top: 92%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .brandMark,
   .loadingTrack span,
-  .videoSpinner {
+  .videoSpinner,
+  .scanSpinner,
+  .scanLine {
     animation-duration: 1.8s;
   }
 }

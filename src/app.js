@@ -1,6 +1,12 @@
 require('./index.css')
 
+const {
+  imageIdentificationPipelineModule,
+} = require('./image-identification-pipeline')
+
 const onxrloaded = () => {
+  XR8.addCameraPipelineModule(imageIdentificationPipelineModule())
+
   XR8.XrController.configure({
     imageTargetData: [
       require('../image-targets/model-target.json'),
@@ -15,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const scene = document.querySelector('a-scene')
   const video = document.querySelector('#jelly-video')
   const appLoader = document.querySelector('#customLoader')
+  const scanOverlay = document.querySelector('#scanOverlay')
   const videoLoader = document.querySelector('#videoLoader')
   const videoLoaderText = document.querySelector('#videoLoaderText')
 
@@ -79,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     playbackRequested = true
+    scanOverlay?.classList.add('is-hidden')
     video.muted = false
 
     if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
@@ -97,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     playbackRequested = false
+    scanOverlay?.classList.remove('is-hidden')
     hideVideoLoader()
     video.pause()
     video.currentTime = 0

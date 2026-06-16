@@ -4,6 +4,9 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <!-- Add the image-identification API URL here. It can also be supplied with ?imageApi=https://... -->
+  <meta name="image-identification-api" content="">
+  <meta name="image-identification-field" content="formData">
 
   <title>A-Frame: Image Targets Example</title>
   <script crossorigin="anonymous" src="./external/scripts/8frame-1.5.0.min.js"></script>
@@ -25,6 +28,21 @@
       </div>
       <div class="loaderTitle">Preparing your Magic Video</div>
       <div class="loadingTrack" aria-hidden="true"><span></span></div>
+    </div>
+  </div>
+
+  <div id="scanOverlay" class="scanOverlay" aria-live="polite">
+    <div class="scanHint">Keep your Gift inside the square</div>
+    <div id="scanRegion" class="scanRegion" aria-hidden="true">
+      <span class="scanCorner scanCornerTopLeft"></span>
+      <span class="scanCorner scanCornerTopRight"></span>
+      <span class="scanCorner scanCornerBottomLeft"></span>
+      <span class="scanCorner scanCornerBottomRight"></span>
+      <span class="scanLine"></span>
+    </div>
+    <div class="scanStatus">
+      <span class="scanSpinner" aria-hidden="true"></span>
+      <span>Searching image...</span>
     </div>
   </div>
 

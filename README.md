@@ -23,6 +23,24 @@ https://8thwall.org/aframe-image-targets-example/
 5. To connect to a mobile device, follow [these instructions](https://8th.io/test-on-mobile)
 6. Recommended: Track your files using [git](https://git-scm.com/about) to avoid losing progress
 
+### Image Identification API
+
+The app captures a center-cropped JPEG from the 8th Wall camera pipeline every two seconds and
+sends it to an image-identification API as multipart form data. Set the endpoint in
+`src/index.html`:
+
+```html
+<meta name="image-identification-api" content="https://example.com/image-identification">
+```
+
+The default multipart field is `formData`, matching `MindARFrameApi.jsx`. It can be changed with
+the `image-identification-field` meta tag. You can also test a different endpoint without
+rebuilding by opening the app with `?imageApi=https://example.com/image-identification`.
+
+Successful API results are logged as `[image-identification] Identified image response:` and are
+also emitted as an `imageidentified` event on `window`. The event is the extension point for
+loading the returned target JSON and video in the next phase.
+
 ### Preparing Target Images
 
 Image targets can be generated using the interactive CLI tool: 
