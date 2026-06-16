@@ -3,7 +3,6 @@ require('./index.css')
 const onxrloaded = () => {
   XR8.XrController.configure({
     imageTargetData: [
-      require('../image-targets/model-target.json'),
       require('../image-targets/Murugar_god.json'),
     ],
   })
