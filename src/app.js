@@ -20,19 +20,23 @@ const getMagicEntries = (response) => {
     .filter(item => item && Object(item) === item && item.targetName && item.videoUrl)
 }
 
+const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
+
 const bindImageTargetName = (target, targetName) => {
   if (!target) return
+  if (target.dataset.magicTargetName === targetName) return
 
   // XR Extras captures the target name in init() and does not react to later updates.
   // Recreate the component so a dynamically loaded target is actually tracked/rendered.
   target.setAttribute('name', targetName)
   target.removeAttribute('xrextras-named-image-target')
   target.setAttribute('xrextras-named-image-target', {name: targetName})
+  target.dataset.magicTargetName = targetName
 }
 
 const loadImageTarget = (entry) => {
   const assetRoot = joinUrl(MAGIC_CDN_BASE, entry.path || '')
-  const targetName = String(entry.targetName).replace(/\.json$/i, '')
+  const targetName = normalizeTargetName(entry.targetName)
   const targetJsonUrl = joinUrl(assetRoot, `${targetName}.json`)
 
   return fetch(targetJsonUrl)
@@ -82,8 +86,9 @@ document.addEventListener('DOMContentLoaded', () => {
     return
   }
 
-  let playbackRequested = false
-  let activeTargetName = ''
+  const targetExperiences = new Map()
+  let activeMatchSignature = ''
+  let playingTargetName = ''
   let applyingMatch = false
 
   const hideAppLoader = () => {
@@ -91,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const showVideoLoader = (message = 'Buffering video...') => {
-    if (!playbackRequested) {
+    if (!playingTargetName) {
       return
     }
 
@@ -115,53 +120,86 @@ document.addEventListener('DOMContentLoaded', () => {
   video.pause()
   hideVideoLoader()
 
-  video.addEventListener('loadstart', () => {
-    showVideoLoader('Loading video...')
-  })
+  const bindVideoEvents = (targetVideo) => {
+    targetVideo.addEventListener('loadstart', () => showVideoLoader('Loading video...'))
+    targetVideo.addEventListener('waiting', () => showVideoLoader('Buffering video...'))
+    targetVideo.addEventListener('stalled', () => showVideoLoader('Connection is slow...'))
+    targetVideo.addEventListener('canplay', hideVideoLoader)
+    targetVideo.addEventListener('playing', () => {
+      hideVideoLoader()
+      window.dispatchEvent(new Event('imageidentificationpause'))
+      console.log('[magic] Video is playing; identification paused.')
+    })
+    targetVideo.addEventListener('pause', hideVideoLoader)
+    targetVideo.addEventListener('error', () => showVideoLoader('Video could not be loaded'))
+  }
 
-  video.addEventListener('waiting', () => {
-    showVideoLoader('Buffering video...')
-  })
+  bindVideoEvents(video)
 
-  video.addEventListener('stalled', () => {
-    showVideoLoader('Connection is slow...')
-  })
+  const clearTargetExperiences = () => {
+    video.pause()
+    targetExperiences.forEach(({target}, targetName) => {
+      if (targetName === target.dataset.magicTargetName && target.id === 'magic-image-target') {
+        target.removeAttribute('xrextras-named-image-target')
+        target.removeAttribute('name')
+        delete target.dataset.magicTargetName
+      } else {
+        target.remove()
+      }
+    })
+    targetExperiences.clear()
+    playingTargetName = ''
+  }
 
-  video.addEventListener('canplay', hideVideoLoader)
-  video.addEventListener('playing', () => {
-    hideVideoLoader()
-    window.dispatchEvent(new Event('imageidentificationpause'))
-    console.log('[magic] Video is playing; identification paused.')
-  })
-  video.addEventListener('pause', hideVideoLoader)
+  const createTargetExperience = (match, index) => {
+    const target = index === 0
+      ? document.querySelector('#magic-image-target')
+      : document.createElement('xrextras-named-image-target')
 
-  video.addEventListener('error', () => {
-    showVideoLoader('Video could not be loaded')
-  })
+    if (!target) throw new Error('Image target container is missing.')
+
+    if (index > 0) {
+      target.id = `magic-image-target-${index}`
+      const plane = document.createElement('a-entity')
+      plane.setAttribute('xrextras-target-video-fade', {
+        video: '#magic-video',
+        height: 1,
+        width: 0.79,
+      })
+      plane.setAttribute('geometry', 'primitive: plane; height: 1; width: 0.79;')
+      target.appendChild(plane)
+      scene.appendChild(target)
+    }
+
+    bindImageTargetName(target, match.targetName)
+    targetExperiences.set(match.targetName, {
+      target,
+      videoUrl: match.videoUrl,
+    })
+  }
 
   window.addEventListener('imageidentified', (event) => {
     if (applyingMatch) return
 
-    const entry = getMagicEntries(event.detail)[0]
-    if (!entry) return
+    const entries = getMagicEntries(event.detail)
+    if (!entries.length) return
+
+    const signature = entries.map((entry) => normalizeTargetName(entry.targetName)).join('|')
+    if (signature === activeMatchSignature) return
 
     applyingMatch = true
     showVideoLoader('Loading matched experience...')
 
-    loadImageTarget(entry)
-      .then((match) => {
-        const target = document.querySelector('#magic-image-target')
+    Promise.all(entries.map(loadImageTarget))
+      .then((matches) => {
+        clearTargetExperiences()
+        matches.forEach(createTargetExperience)
+        activeMatchSignature = signature
 
-        video.pause()
-        video.src = match.videoUrl
-        video.load()
-        bindImageTargetName(target, match.targetName)
-        activeTargetName = match.targetName
-
-        XR8.XrController.configure({imageTargetData: [match.targetData]})
+        XR8.XrController.configure({imageTargetData: matches.map(({targetData}) => targetData)})
         scanOverlay?.classList.remove('is-hidden')
         hideVideoLoader()
-        console.log('[magic] Loaded image target:', match.targetName)
+        console.log('[magic] Loaded image targets:', matches.map(({targetName}) => targetName))
       })
       .catch((error) => {
         applyingMatch = false
@@ -172,38 +210,43 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   scene.addEventListener('xrimagefound', (event) => {
-    if (!event.detail || event.detail.name !== activeTargetName) {
-      return
-    }
+    const experience = targetExperiences.get(event.detail?.name)
+    if (!experience) return
 
-    playbackRequested = true
+    const targetChanged = playingTargetName !== event.detail.name
+    playingTargetName = event.detail.name
     scanOverlay?.classList.add('is-hidden')
     video.muted = false
+
+    if (targetChanged || video.src !== experience.videoUrl) {
+      video.pause()
+      video.src = experience.videoUrl
+      video.load()
+    }
 
     if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
       showVideoLoader('Starting video...')
     }
 
-    video.play().catch(() => {
-      playbackRequested = false
+    console.log('[magic] Target detected:', event.detail.name, experience.videoUrl)
+    video.play().catch((error) => {
+      playingTargetName = ''
       hideVideoLoader()
+      console.error('[magic] Video playback failed:', error)
     })
   })
 
   scene.addEventListener('xrimagelost', (event) => {
-    if (!event.detail || event.detail.name !== activeTargetName) {
-      return
-    }
+    const experience = targetExperiences.get(event.detail?.name)
+    if (!experience) return
+    if (playingTargetName !== event.detail.name) return
 
-    playbackRequested = false
+    playingTargetName = ''
     applyingMatch = false
-    activeTargetName = ''
     scanOverlay?.classList.remove('is-hidden')
     hideVideoLoader()
     video.pause()
     video.currentTime = 0
-    XR8.XrController.configure({imageTargetData: []})
-    window.dispatchEvent(new Event('imageidentificationresume'))
-    console.log('[magic] Image target lost; identification resumed.')
+    console.log('[magic] Image target lost:', event.detail.name)
   })
 })
