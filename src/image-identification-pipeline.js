@@ -1,4 +1,5 @@
-const DEFAULT_CAPTURE_INTERVAL_MS = 2000
+const DEFAULT_CAPTURE_INTERVAL_MS = 3000
+const DEFAULT_API_URL = '/ecommerce/magic/image/match'
 const DEFAULT_PROCESSING_WIDTH = 480
 const DEFAULT_JPEG_QUALITY = 0.85
 
@@ -17,11 +18,12 @@ const getRuntimeConfig = () => {
     apiUrl:
       query.get('imageApi') ||
       globalConfig.apiUrl ||
-      getMetaContent('image-identification-api'),
+      getMetaContent('image-identification-api') ||
+      DEFAULT_API_URL,
     fieldName:
       globalConfig.fieldName ||
       getMetaContent('image-identification-field') ||
-      'formData',
+      'files',
     captureIntervalMs: Number(globalConfig.captureIntervalMs) || DEFAULT_CAPTURE_INTERVAL_MS,
     processingWidth: Number(globalConfig.processingWidth) || DEFAULT_PROCESSING_WIDTH,
     jpegQuality: Number(globalConfig.jpegQuality) || DEFAULT_JPEG_QUALITY,
@@ -109,6 +111,21 @@ const parseResponse = (response) => {
   return response.text()
 }
 
+const unwrapMagicResponse = (body) =>
+  body?.response ||
+  body?.data?.response ||
+  body?.data?.data?.response ||
+  body?.payload?.response ||
+  body?.data ||
+  body
+
+const hasMatchedVideo = (body) => {
+  const response = unwrapMagicResponse(body)
+  return Array.isArray(response?.videoUrlV1)
+    ? response.videoUrlV1.length > 0
+    : Boolean(response?.videoUrlV1)
+}
+
 const imageIdentificationPipelineModule = () => {
   const config = getRuntimeConfig()
   const processingCanvas = document.createElement('canvas')
@@ -117,9 +134,10 @@ const imageIdentificationPipelineModule = () => {
   let requestInFlight = false
   let lastCaptureAt = 0
   let warnedAboutMissingApi = false
+  let matchFound = false
 
   const identifyCurrentFrame = () => {
-    if (!config.apiUrl || !cameraCanvas || requestInFlight) {
+    if (matchFound || !config.apiUrl || !cameraCanvas || requestInFlight) {
       if (!config.apiUrl && !warnedAboutMissingApi) {
         warnedAboutMissingApi = true
         console.warn(
@@ -137,14 +155,6 @@ const imageIdentificationPipelineModule = () => {
         const filename = `frame_${Date.now()}.jpg`
         const formData = new FormData()
         formData.append(config.fieldName, blob, filename)
-        formData.append('frameShape', '0')
-        formData.append(
-          'mobileFlag',
-          String(
-            window.matchMedia?.('(pointer: coarse)').matches ||
-              navigator.maxTouchPoints > 0
-          )
-        )
 
         return fetch(config.apiUrl, {
           method: 'POST',
@@ -168,9 +178,14 @@ const imageIdentificationPipelineModule = () => {
         }
 
         console.log('[image-identification] Identified image response:', body)
+        if (!hasMatchedVideo(body)) {
+          return
+        }
+
+        matchFound = true
         window.dispatchEvent(
           new CustomEvent('imageidentified', {
-            detail: body,
+            detail: unwrapMagicResponse(body),
           })
         )
       })
@@ -190,12 +205,13 @@ const imageIdentificationPipelineModule = () => {
       scanRegion = document.querySelector('#scanRegion')
       lastCaptureAt = performance.now()
       console.log('[image-identification] Camera pipeline started.')
+      window.addEventListener('imageidentificationresume', resumeIdentification)
     },
 
     onUpdate: () => {
       const now = performance.now()
 
-      if (requestInFlight || now - lastCaptureAt < config.captureIntervalMs) {
+      if (matchFound || requestInFlight || now - lastCaptureAt < config.captureIntervalMs) {
         return
       }
 
@@ -204,10 +220,17 @@ const imageIdentificationPipelineModule = () => {
     },
 
     onDetach: () => {
+      window.removeEventListener('imageidentificationresume', resumeIdentification)
       cameraCanvas = null
       scanRegion = null
       requestInFlight = false
+      matchFound = false
     },
+  }
+
+  function resumeIdentification() {
+    matchFound = false
+    lastCaptureAt = performance.now()
   }
 }
 

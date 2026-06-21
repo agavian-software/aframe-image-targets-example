@@ -39,12 +39,6 @@ const makeSassLoader = () => ({
   use: ['style-loader', 'css-loader', 'sass-loader'],
 })
 
-const makeAssetLoader = () => ({
-  test: /\..*$/,
-  include: [path.join(srcPath, 'assets')],
-  loader: path.join(__dirname, 'asset-loader.js'),
-})
-
 const makeDefaultHtmlLoader = () => ({
   test: /\.html$/,
   use: {
@@ -91,16 +85,6 @@ const config = {
           to: path.join(distPath, 'external'),
           noErrorOnMissing: true,
         },
-        {
-          from: path.join(srcPath, 'assets'),
-          to: path.join(distPath, 'assets'),
-          noErrorOnMissing: true,
-        },
-        {
-          from: path.join(rootPath, 'image-targets'),
-          to: path.join(distPath, 'image-targets'),
-          noErrorOnMissing: true,
-        },
       ],
     }),
   ],
@@ -111,7 +95,6 @@ const config = {
       makeTsLoader(),
       makeCssLoader(),
       makeSassLoader(),
-      makeAssetLoader(),
       makeDefaultHtmlLoader(),
     ],
   },

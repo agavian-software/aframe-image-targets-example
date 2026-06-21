@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <!-- Add the image-identification API URL here. It can also be supplied with ?imageApi=https://... -->
   <meta name="image-identification-api" content="">
-  <meta name="image-identification-field" content="formData">
+  <meta name="image-identification-field" content="files">
 
   <title>A-Frame: Image Targets Example</title>
   <script crossorigin="anonymous" src="./external/scripts/8frame-1.5.0.min.js"></script>
@@ -50,10 +50,7 @@
     renderer="colorManagement:true" xrweb="disableWorldTracking: true">
 
     <a-assets>
-      <img id="jelly-thumb" src="assets/video-target.jpg">
-      <video id="jelly-video" muted playsinline preload="metadata" crossorigin="anonymous" loop="true"
-        src="assets/Video Project 61.mp4">
-      </video>
+      <video id="magic-video" muted playsinline preload="metadata" crossorigin="anonymous" loop="true"></video>
     </a-assets>
 
     <a-camera position="0 4 10" raycaster="objects: .cantap" cursor="fuse: false; rayOrigin: mouse;">
@@ -62,8 +59,8 @@
     <a-light type="directional" intensity="0.5" position="1 1 1"></a-light>
     <a-light type="ambient" intensity="1"></a-light>
 
-    <xrextras-named-image-target name="Manoj_A3_plus">
-      <a-entity xrextras-target-video-fade="video: #jelly-video; height: 1; width: 0.79;"
+    <xrextras-named-image-target id="magic-image-target" name="">
+      <a-entity xrextras-target-video-fade="video: #magic-video; height: 1; width: 0.79;"
         geometry="primitive: plane; height: 1; width: 0.79;"></a-entity>
     </xrextras-named-image-target>
   </a-scene>
