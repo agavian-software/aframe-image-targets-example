@@ -237,7 +237,8 @@ const imageIdentificationPipelineModule = () => {
 
   function resumeIdentification() {
     matchFound = false
-    lastCaptureAt = performance.now()
+    // The caller owns the delay, so capture on the next pipeline update.
+    lastCaptureAt = performance.now() - config.captureIntervalMs
   }
 }
 

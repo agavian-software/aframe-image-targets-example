@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeMatchSignature = ''
   let playingTargetName = ''
   let applyingMatch = false
+  let identificationRestartTimer = null
 
   const hideAppLoader = () => {
     appLoader.classList.add('is-hidden')
@@ -108,6 +109,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const hideVideoLoader = () => {
     videoLoader.classList.remove('is-visible')
     videoLoader.setAttribute('aria-hidden', 'true')
+  }
+
+  const cancelIdentificationRestart = () => {
+    if (identificationRestartTimer === null) return
+    window.clearTimeout(identificationRestartTimer)
+    identificationRestartTimer = null
+  }
+
+  const restartIdentificationAfterVideo = () => {
+    cancelIdentificationRestart()
+    applyingMatch = false
+    playingTargetName = ''
+    scanOverlay?.classList.remove('is-hidden')
+
+    identificationRestartTimer = window.setTimeout(() => {
+      identificationRestartTimer = null
+      window.dispatchEvent(new Event('imageidentificationresume'))
+      console.log('[magic] Video stopped; image identification resumed after 4 seconds.')
+    }, 4000)
   }
 
   scene.addEventListener('realityready', hideAppLoader, {once: true})
@@ -131,6 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log('[magic] Video is playing; identification paused.')
     })
     targetVideo.addEventListener('pause', hideVideoLoader)
+    targetVideo.addEventListener('ended', restartIdentificationAfterVideo)
     targetVideo.addEventListener('error', () => showVideoLoader('Video could not be loaded'))
   }
 
@@ -213,6 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const experience = targetExperiences.get(event.detail?.name)
     if (!experience) return
 
+    cancelIdentificationRestart()
     const targetChanged = playingTargetName !== event.detail.name
     playingTargetName = event.detail.name
     scanOverlay?.classList.add('is-hidden')
@@ -241,12 +263,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!experience) return
     if (playingTargetName !== event.detail.name) return
 
-    playingTargetName = ''
-    applyingMatch = false
     scanOverlay?.classList.remove('is-hidden')
     hideVideoLoader()
     video.pause()
     video.currentTime = 0
+    restartIdentificationAfterVideo()
     console.log('[magic] Image target lost:', event.detail.name)
   })
 })
