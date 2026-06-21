@@ -1,5 +1,5 @@
 const DEFAULT_CAPTURE_INTERVAL_MS = 3000
-const DEFAULT_API_URL = '/ecommerce/magic/image/match'
+const DEFAULT_API_URL = 'https://backend.agavian.in/ecommerce/magic/v1/image/match'
 const DEFAULT_PROCESSING_WIDTH = 480
 const DEFAULT_JPEG_QUALITY = 0.85
 
@@ -27,7 +27,9 @@ const getRuntimeConfig = () => {
     captureIntervalMs: Number(globalConfig.captureIntervalMs) || DEFAULT_CAPTURE_INTERVAL_MS,
     processingWidth: Number(globalConfig.processingWidth) || DEFAULT_PROCESSING_WIDTH,
     jpegQuality: Number(globalConfig.jpegQuality) || DEFAULT_JPEG_QUALITY,
-    headers: globalConfig.headers || {},
+    headers: Object.assign({
+      'x-tenant-id': 'TENT-136C2091',
+    }, globalConfig.headers || {}),
   }
 }
 
@@ -182,7 +184,6 @@ const imageIdentificationPipelineModule = () => {
           return
         }
 
-        matchFound = true
         window.dispatchEvent(
           new CustomEvent('imageidentified', {
             detail: unwrapMagicResponse(body),
@@ -205,6 +206,7 @@ const imageIdentificationPipelineModule = () => {
       scanRegion = document.querySelector('#scanRegion')
       lastCaptureAt = performance.now()
       console.log('[image-identification] Camera pipeline started.')
+      window.addEventListener('imageidentificationpause', pauseIdentification)
       window.addEventListener('imageidentificationresume', resumeIdentification)
     },
 
@@ -220,12 +222,17 @@ const imageIdentificationPipelineModule = () => {
     },
 
     onDetach: () => {
+      window.removeEventListener('imageidentificationpause', pauseIdentification)
       window.removeEventListener('imageidentificationresume', resumeIdentification)
       cameraCanvas = null
       scanRegion = null
       requestInFlight = false
       matchFound = false
     },
+  }
+
+  function pauseIdentification() {
+    matchFound = true
   }
 
   function resumeIdentification() {

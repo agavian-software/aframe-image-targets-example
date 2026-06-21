@@ -20,6 +20,16 @@ const getMagicEntries = (response) => {
     .filter(item => item && Object(item) === item && item.targetName && item.videoUrl)
 }
 
+const bindImageTargetName = (target, targetName) => {
+  if (!target) return
+
+  // XR Extras captures the target name in init() and does not react to later updates.
+  // Recreate the component so a dynamically loaded target is actually tracked/rendered.
+  target.setAttribute('name', targetName)
+  target.removeAttribute('xrextras-named-image-target')
+  target.setAttribute('xrextras-named-image-target', {name: targetName})
+}
+
 const loadImageTarget = (entry) => {
   const assetRoot = joinUrl(MAGIC_CDN_BASE, entry.path || '')
   const targetName = String(entry.targetName).replace(/\.json$/i, '')
@@ -45,7 +55,7 @@ const loadImageTarget = (entry) => {
       return {
         targetData,
         targetName,
-        videoUrl: joinUrl(assetRoot, entry.videoUrl),
+        videoUrl: joinUrl(MAGIC_CDN_BASE, entry.videoUrl),
       }
     })
 }
@@ -118,7 +128,11 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   video.addEventListener('canplay', hideVideoLoader)
-  video.addEventListener('playing', hideVideoLoader)
+  video.addEventListener('playing', () => {
+    hideVideoLoader()
+    window.dispatchEvent(new Event('imageidentificationpause'))
+    console.log('[magic] Video is playing; identification paused.')
+  })
   video.addEventListener('pause', hideVideoLoader)
 
   video.addEventListener('error', () => {
@@ -141,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         video.pause()
         video.src = match.videoUrl
         video.load()
-        target?.setAttribute('name', match.targetName)
+        bindImageTargetName(target, match.targetName)
         activeTargetName = match.targetName
 
         XR8.XrController.configure({imageTargetData: [match.targetData]})
@@ -182,9 +196,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     playbackRequested = false
+    applyingMatch = false
+    activeTargetName = ''
     scanOverlay?.classList.remove('is-hidden')
     hideVideoLoader()
     video.pause()
     video.currentTime = 0
+    XR8.XrController.configure({imageTargetData: []})
+    window.dispatchEvent(new Event('imageidentificationresume'))
+    console.log('[magic] Image target lost; identification resumed.')
   })
 })

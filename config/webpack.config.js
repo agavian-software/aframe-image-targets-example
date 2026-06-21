@@ -101,6 +101,7 @@ const config = {
   mode: 'production',
   context: srcPath,
   devServer: {
+    port: 3000,
     open: false,
     compress: true,
     hot: true,

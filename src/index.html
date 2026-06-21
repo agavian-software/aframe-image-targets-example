@@ -46,8 +46,9 @@
     </div>
   </div>
 
-  <a-scene xrextras-gesture-detector landing-page xrextras-runtime-error
-    renderer="colorManagement:true" xrweb="disableWorldTracking: true">
+  <a-scene xrextras-gesture-detector xrextras-runtime-error
+    renderer="colorManagement:true"
+    xrweb="allowedDevices: any; disableWorldTracking: true">
 
     <a-assets>
       <video id="magic-video" muted playsinline preload="metadata" crossorigin="anonymous" loop="true"></video>
