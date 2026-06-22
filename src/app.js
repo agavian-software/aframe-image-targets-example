@@ -22,6 +22,29 @@ const getMagicEntries = (response) => {
 
 const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
 
+const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
+// Slightly overlap the tracked boundary so pose jitter/cropping never reveals a rim.
+const TARGET_VIDEO_OVERSCAN = 1.06
+
+const getTargetSize = imageUrl => new Promise((resolve) => {
+  const image = new Image()
+
+  image.onload = () => {
+    const aspect = image.naturalWidth / image.naturalHeight
+    if (!Number.isFinite(aspect) || aspect <= 0) {
+      resolve(DEFAULT_TARGET_SIZE)
+      return
+    }
+
+    // Image-target coordinates use the longest side as one unit.
+    resolve(aspect >= 1
+      ? {width: 1, height: 1 / aspect}
+      : {width: aspect, height: 1})
+  }
+  image.onerror = () => resolve(DEFAULT_TARGET_SIZE)
+  image.src = imageUrl
+})
+
 const bindImageTargetName = (target, targetName) => {
   if (!target) return
   if (target.dataset.magicTargetName === targetName) return
@@ -56,11 +79,12 @@ const loadImageTarget = (entry) => {
         luminanceImage: joinUrl(assetRoot, `${targetName}_luminance.jpg`),
       })
 
-      return {
+      return getTargetSize(targetData.imagePath).then(targetSize => ({
         targetData,
         targetName,
+        targetSize,
         videoUrl: joinUrl(MAGIC_CDN_BASE, entry.videoUrl),
-      }
+      }))
     })
 }
 
@@ -179,16 +203,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!target) throw new Error('Image target container is missing.')
 
+    let plane = target.querySelector('[xrextras-target-video-fade]')
+
+    if (!plane) {
+      plane = document.createElement('a-entity')
+      target.appendChild(plane)
+    }
+
+    const targetSize = match.targetSize || DEFAULT_TARGET_SIZE
+    const width = targetSize.width * TARGET_VIDEO_OVERSCAN
+    const height = targetSize.height * TARGET_VIDEO_OVERSCAN
+    plane.setAttribute('xrextras-target-video-fade', {
+      video: '#magic-video',
+      height,
+      width,
+    })
+    plane.setAttribute('geometry', {primitive: 'plane', height, width})
+
     if (index > 0) {
       target.id = `magic-image-target-${index}`
-      const plane = document.createElement('a-entity')
-      plane.setAttribute('xrextras-target-video-fade', {
-        video: '#magic-video',
-        height: 1,
-        width: 0.79,
-      })
-      plane.setAttribute('geometry', 'primitive: plane; height: 1; width: 0.79;')
-      target.appendChild(plane)
       scene.appendChild(target)
     }
 
