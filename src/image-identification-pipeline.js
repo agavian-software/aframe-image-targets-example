@@ -1,4 +1,5 @@
 const DEFAULT_CAPTURE_INTERVAL_MS = 3000
+const DEFAULT_IDENTIFICATION_TIMEOUT_MS = 30000
 const DEFAULT_API_URL = 'https://backend.agavian.in/ecommerce/magic/v1/image/match'
 const DEFAULT_PROCESSING_WIDTH = 480
 const DEFAULT_JPEG_QUALITY = 0.85
@@ -25,6 +26,8 @@ const getRuntimeConfig = () => {
       getMetaContent('image-identification-field') ||
       'files',
     captureIntervalMs: Number(globalConfig.captureIntervalMs) || DEFAULT_CAPTURE_INTERVAL_MS,
+    identificationTimeoutMs:
+      Number(globalConfig.identificationTimeoutMs) || DEFAULT_IDENTIFICATION_TIMEOUT_MS,
     processingWidth: Number(globalConfig.processingWidth) || DEFAULT_PROCESSING_WIDTH,
     jpegQuality: Number(globalConfig.jpegQuality) || DEFAULT_JPEG_QUALITY,
     headers: Object.assign({
@@ -137,6 +140,24 @@ const imageIdentificationPipelineModule = () => {
   let lastCaptureAt = 0
   let warnedAboutMissingApi = false
   let matchFound = false
+  let identificationStartedAt = 0
+  let requestController = null
+  let timedOut = false
+
+  const stopPendingRequest = () => {
+    if (requestController) {
+      requestController.abort()
+      requestController = null
+    }
+  }
+
+  const timeOutIdentification = () => {
+    timedOut = true
+    matchFound = true
+    stopPendingRequest()
+    window.dispatchEvent(new Event('imageidentificationtimeout'))
+    console.log('[image-identification] Stopped after 30 seconds without a match.')
+  }
 
   const identifyCurrentFrame = () => {
     if (matchFound || !config.apiUrl || !cameraCanvas || requestInFlight) {
@@ -151,6 +172,8 @@ const imageIdentificationPipelineModule = () => {
     }
 
     requestInFlight = true
+    const controller = new AbortController()
+    requestController = controller
 
     return canvasToJpeg(cameraCanvas, scanRegion, config, processingCanvas)
       .then((blob) => {
@@ -162,6 +185,7 @@ const imageIdentificationPipelineModule = () => {
           method: 'POST',
           headers: config.headers,
           body: formData,
+          signal: controller.signal,
         })
       })
       .then((response) =>
@@ -180,7 +204,7 @@ const imageIdentificationPipelineModule = () => {
         }
 
         console.log('[image-identification] Identified image response:', body)
-        if (!hasMatchedVideo(body)) {
+        if (timedOut || !hasMatchedVideo(body)) {
           return
         }
 
@@ -191,10 +215,12 @@ const imageIdentificationPipelineModule = () => {
         )
       })
       .catch((error) => {
+        if (error.name === 'AbortError') return
         console.error('[image-identification] Request failed:', error)
       })
       .finally(() => {
         requestInFlight = false
+        if (requestController === controller) requestController = null
       })
   }
 
@@ -205,6 +231,7 @@ const imageIdentificationPipelineModule = () => {
       cameraCanvas = canvas
       scanRegion = document.querySelector('#scanRegion')
       lastCaptureAt = performance.now()
+      identificationStartedAt = lastCaptureAt
       console.log('[image-identification] Camera pipeline started.')
       window.addEventListener('imageidentificationpause', pauseIdentification)
       window.addEventListener('imageidentificationresume', resumeIdentification)
@@ -212,6 +239,11 @@ const imageIdentificationPipelineModule = () => {
 
     onUpdate: () => {
       const now = performance.now()
+
+      if (!matchFound && now - identificationStartedAt >= config.identificationTimeoutMs) {
+        timeOutIdentification()
+        return
+      }
 
       if (matchFound || requestInFlight || now - lastCaptureAt < config.captureIntervalMs) {
         return
@@ -228,15 +260,19 @@ const imageIdentificationPipelineModule = () => {
       scanRegion = null
       requestInFlight = false
       matchFound = false
+      stopPendingRequest()
     },
   }
 
   function pauseIdentification() {
     matchFound = true
+    stopPendingRequest()
   }
 
   function resumeIdentification() {
     matchFound = false
+    timedOut = false
+    identificationStartedAt = performance.now()
     // The caller owns the delay, so capture on the next pipeline update.
     lastCaptureAt = performance.now() - config.captureIntervalMs
   }

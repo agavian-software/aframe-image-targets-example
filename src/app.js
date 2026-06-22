@@ -105,6 +105,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const scanOverlay = document.querySelector('#scanOverlay')
   const videoLoader = document.querySelector('#videoLoader')
   const videoLoaderText = document.querySelector('#videoLoaderText')
+  const timeoutOverlay = document.querySelector('#identificationTimeout')
+  const tryAgainButton = document.querySelector('#identificationTryAgain')
+  const exitButton = document.querySelector('#identificationExit')
 
   if (!scene || !video || !appLoader || !videoLoader || !videoLoaderText) {
     return
@@ -180,6 +183,24 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   bindVideoEvents(video)
+
+  window.addEventListener('imageidentificationtimeout', () => {
+    scanOverlay?.classList.add('is-hidden')
+    timeoutOverlay?.classList.add('is-visible')
+    timeoutOverlay?.setAttribute('aria-hidden', 'false')
+    tryAgainButton?.focus()
+  })
+
+  tryAgainButton?.addEventListener('click', () => {
+    timeoutOverlay?.classList.remove('is-visible')
+    timeoutOverlay?.setAttribute('aria-hidden', 'true')
+    scanOverlay?.classList.remove('is-hidden')
+    window.dispatchEvent(new Event('imageidentificationresume'))
+  })
+
+  exitButton?.addEventListener('click', () => {
+    window.location.assign('https://www.sisulogs.com/')
+  })
 
   const clearTargetExperiences = () => {
     video.pause()

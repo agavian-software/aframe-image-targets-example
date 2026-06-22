@@ -252,6 +252,167 @@ body {
   animation: spin 700ms linear infinite;
 }
 
+.brandBar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10001;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: max(12px, env(safe-area-inset-top)) 16px 0;
+  pointer-events: none;
+}
+
+.brandHome,
+.brandClose {
+  pointer-events: auto;
+  color: #fff;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(5, 8, 14, 0.72);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.brandHome {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 7px;
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  border-radius: 999px;
+}
+
+.brandLogo {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.brandClose {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+}
+
+.brandClose span::before,
+.brandClose span::after {
+  position: absolute;
+  top: 21px;
+  left: 13px;
+  width: 20px;
+  height: 2px;
+  content: "";
+  border-radius: 999px;
+  background: #fff;
+}
+
+.brandClose span::before {
+  transform: rotate(45deg);
+}
+
+.brandClose span::after {
+  transform: rotate(-45deg);
+}
+
+.brandHome:focus-visible,
+.brandClose:focus-visible {
+  outline: 3px solid #7fe7ff;
+  outline-offset: 3px;
+}
+
+.timeoutOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  color: #fff;
+  background: rgba(2, 4, 9, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 180ms ease, visibility 180ms ease;
+}
+
+.timeoutOverlay.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.timeoutCard {
+  width: min(100%, 390px);
+  padding: 32px 26px 26px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(24, 33, 58, 0.98), rgba(8, 11, 20, 0.98));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+
+.timeoutIcon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 18px;
+  place-items: center;
+  color: #fff;
+  font-size: 30px;
+  font-weight: 800;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff7657, #ff3d71);
+}
+
+.timeoutCard h2 {
+  margin: 0;
+  font-size: 23px;
+}
+
+.timeoutCard p {
+  margin: 11px 0 25px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.timeoutActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.timeoutButton {
+  min-height: 48px;
+  padding: 0 18px;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  border: 0;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.timeoutButtonPrimary {
+  background: linear-gradient(135deg, #755cff, #28bff5);
+}
+
+.timeoutButtonSecondary {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

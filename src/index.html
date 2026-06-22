@@ -21,6 +21,16 @@
 <body>
   <script src="bundle.js"></script>
 
+  <nav class="brandBar" aria-label="Sisu Logs navigation">
+    <a class="brandHome" href="https://www.sisulogs.com/" aria-label="Go to Sisu Logs">
+      <img src="./assets/Untitled design (40).png" alt="" class="brandLogo">
+      <span>Sisu Logs</span>
+    </a>
+    <a class="brandClose" href="https://www.sisulogs.com/" aria-label="Close and go to Sisu Logs">
+      <span aria-hidden="true"></span>
+    </a>
+  </nav>
+
   <div id="customLoader" role="status" aria-live="polite">
     <div class="loaderBox">
       <div class="brandMark" aria-hidden="true">
@@ -69,6 +79,19 @@
   <div id="videoLoader" class="videoLoader" role="status" aria-live="polite" aria-hidden="true">
     <span class="videoSpinner" aria-hidden="true"></span>
     <span id="videoLoaderText">Buffering video...</span>
+  </div>
+
+  <div id="identificationTimeout" class="timeoutOverlay" role="dialog" aria-modal="true"
+    aria-labelledby="timeoutTitle" aria-hidden="true">
+    <div class="timeoutCard">
+      <div class="timeoutIcon" aria-hidden="true">!</div>
+      <h2 id="timeoutTitle">Image not found</h2>
+      <p>We couldn’t identify your image. Please try scanning it again.</p>
+      <div class="timeoutActions">
+        <button id="identificationTryAgain" class="timeoutButton timeoutButtonPrimary" type="button">Try again</button>
+        <button id="identificationExit" class="timeoutButton timeoutButtonSecondary" type="button">Exit</button>
+      </div>
+    </div>
   </div>
 </body>
 

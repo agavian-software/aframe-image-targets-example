@@ -96,6 +96,11 @@ const config = {
       makeCssLoader(),
       makeSassLoader(),
       makeDefaultHtmlLoader(),
+      {
+        test: /\.(png|jpe?g|gif|webp)$/i,
+        type: 'asset/resource',
+        generator: {filename: 'assets/[name][ext]'},
+      },
     ],
   },
   mode: 'production',
