@@ -23,13 +23,24 @@
 
   <nav class="brandBar" aria-label="Sisu Logs navigation">
     <a class="brandHome" href="https://www.sisulogs.com/" aria-label="Go to Sisu Logs">
-      <img src="./assets/Untitled design (40).png" alt="" class="brandLogo">
+      <img src="./assets/logo.png" alt="" class="brandLogo">
       <span>Sisu Logs</span>
     </a>
     <a class="brandClose" href="https://www.sisulogs.com/" aria-label="Close and go to Sisu Logs">
       <span aria-hidden="true"></span>
     </a>
   </nav>
+
+  <button id="soundToggle" class="soundToggle" type="button" aria-label="Mute video" aria-pressed="false">
+    <svg class="soundIcon soundIconOn" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9v6h4l5 4V5L8 9H4z"></path>
+      <path d="M16 8.2a5 5 0 0 1 0 7.6M18.5 5.7a8.5 8.5 0 0 1 0 12.6"></path>
+    </svg>
+    <svg class="soundIcon soundIconOff" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9v6h4l5 4V5L8 9H4z"></path>
+      <path d="m16 9 5 5m0-5-5 5"></path>
+    </svg>
+  </button>
 
   <div id="customLoader" role="status" aria-live="polite">
     <div class="loaderBox">

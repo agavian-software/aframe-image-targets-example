@@ -108,6 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const timeoutOverlay = document.querySelector('#identificationTimeout')
   const tryAgainButton = document.querySelector('#identificationTryAgain')
   const exitButton = document.querySelector('#identificationExit')
+  const soundToggle = document.querySelector('#soundToggle')
 
   if (!scene || !video || !appLoader || !videoLoader || !videoLoaderText) {
     return
@@ -118,6 +119,14 @@ document.addEventListener('DOMContentLoaded', () => {
   let playingTargetName = ''
   let applyingMatch = false
   let identificationRestartTimer = null
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+
+  const updateSoundButton = () => {
+    soundToggle?.classList.toggle('is-muted', video.muted)
+    soundToggle?.setAttribute('aria-pressed', String(video.muted))
+    soundToggle?.setAttribute('aria-label', video.muted ? 'Unmute video' : 'Mute video')
+  }
 
   const hideAppLoader = () => {
     appLoader.classList.add('is-hidden')
@@ -165,6 +174,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }, {once: true})
 
   video.pause()
+  video.muted = isIOS
+  video.defaultMuted = isIOS
+  updateSoundButton()
   hideVideoLoader()
 
   const bindVideoEvents = (targetVideo) => {
@@ -183,6 +195,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   bindVideoEvents(video)
+
+  soundToggle?.addEventListener('click', () => {
+    video.muted = !video.muted
+    updateSoundButton()
+
+    if (!video.paused) return
+    video.play().catch((error) => {
+      console.error('[magic] Video playback failed after sound change:', error)
+    })
+  })
 
   window.addEventListener('imageidentificationtimeout', () => {
     scanOverlay?.classList.add('is-hidden')
@@ -292,7 +314,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const targetChanged = playingTargetName !== event.detail.name
     playingTargetName = event.detail.name
     scanOverlay?.classList.add('is-hidden')
-    video.muted = false
+    video.muted = isIOS
+    updateSoundButton()
 
     if (targetChanged || video.src !== experience.videoUrl) {
       video.pause()
