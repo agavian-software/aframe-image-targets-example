@@ -70,7 +70,8 @@ const config = {
   output: {
     filename: 'bundle.js',
     path: distPath,
-    publicPath: '/',
+    // Keep emitted assets relative so dist can be hosted under a Next.js subpath.
+    publicPath: './',
   },
   plugins: [
     new HtmlWebpackPlugin({
