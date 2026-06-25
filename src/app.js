@@ -23,8 +23,12 @@ const getMagicEntries = (response) => {
 const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
 
 const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
-// Slightly overlap the tracked boundary so pose jitter/cropping never reveals a rim.
-const TARGET_VIDEO_OVERSCAN = 1.06
+// Overlap the tracked boundary so pose jitter/cropping never reveals a rim.
+// The generated target/video pairs are usually portrait, and the video plane
+// was leaving side gutters, so horizontal overscan is intentionally stronger.
+const TARGET_VIDEO_OVERSCAN_X = 1.28
+const TARGET_VIDEO_OVERSCAN_Y = 1.08
+const TARGET_LOST_GRACE_MS = 2500
 
 const getTargetSize = imageUrl => new Promise((resolve) => {
   const image = new Image()
@@ -119,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let playingTargetName = ''
   let applyingMatch = false
   let identificationRestartTimer = null
+  let targetLostTimer = null
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
@@ -153,7 +158,14 @@ document.addEventListener('DOMContentLoaded', () => {
     identificationRestartTimer = null
   }
 
+  const cancelTargetLostTimer = () => {
+    if (targetLostTimer === null) return
+    window.clearTimeout(targetLostTimer)
+    targetLostTimer = null
+  }
+
   const restartIdentificationAfterVideo = () => {
+    cancelTargetLostTimer()
     cancelIdentificationRestart()
     applyingMatch = false
     playingTargetName = ''
@@ -225,6 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   const clearTargetExperiences = () => {
+    cancelTargetLostTimer()
     video.pause()
     targetExperiences.forEach(({target}, targetName) => {
       if (targetName === target.dataset.magicTargetName && target.id === 'magic-image-target') {
@@ -254,8 +267,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const targetSize = match.targetSize || DEFAULT_TARGET_SIZE
-    const width = targetSize.width * TARGET_VIDEO_OVERSCAN
-    const height = targetSize.height * TARGET_VIDEO_OVERSCAN
+    const width = targetSize.width * TARGET_VIDEO_OVERSCAN_X
+    const height = targetSize.height * TARGET_VIDEO_OVERSCAN_Y
     plane.setAttribute('xrextras-target-video-fade', {
       video: '#magic-video',
       height,
@@ -310,6 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const experience = targetExperiences.get(event.detail?.name)
     if (!experience) return
 
+    cancelTargetLostTimer()
     cancelIdentificationRestart()
     const targetChanged = playingTargetName !== event.detail.name
     playingTargetName = event.detail.name
@@ -340,11 +354,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!experience) return
     if (playingTargetName !== event.detail.name) return
 
-    scanOverlay?.classList.remove('is-hidden')
     hideVideoLoader()
-    video.pause()
-    video.currentTime = 0
-    restartIdentificationAfterVideo()
-    console.log('[magic] Image target lost:', event.detail.name)
+
+    cancelTargetLostTimer()
+    targetLostTimer = window.setTimeout(() => {
+      targetLostTimer = null
+
+      if (playingTargetName !== event.detail.name) return
+
+      video.pause()
+      restartIdentificationAfterVideo()
+      console.log('[magic] Image target lost long enough to pause video:', event.detail.name)
+    }, TARGET_LOST_GRACE_MS)
+
+    console.log('[magic] Image target temporarily lost:', event.detail.name)
   })
 })
