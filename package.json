@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "scripts": {
     "build": "webpack --config config/webpack.config.js",
-    "serve": "webpack-dev-server --mode=development --config config/webpack.config.js"
+    "dev": "webpack-dev-server --mode=development --config config/webpack.config.js",
+    "server": "node serve-ui.js",
+    "start": "node serve-ui.js",
+    "serve:ui": "node serve-ui.js",
+    "serve": "node serve-ui.js"
   },
   "devDependencies": {
     "@babel/parser": "^7.23.9",
