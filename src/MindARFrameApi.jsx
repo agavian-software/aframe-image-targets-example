@@ -244,6 +244,48 @@ function joinCdn(base, maybePath) {
   return `${cleanBase}${cleanPath}`;
 }
 
+const DEFAULT_TARGET_SIZE = { width: 1, height: 1 };
+const TARGET_VIDEO_OVERSCAN = 1.04;
+
+function getTargetSizeFromAspect(aspect) {
+  if (!Number.isFinite(aspect) || aspect <= 0) return DEFAULT_TARGET_SIZE;
+  return aspect >= 1 ? { width: 1, height: 1 / aspect } : { width: aspect, height: 1 };
+}
+
+function getImageSize(imageUrl) {
+  return new Promise((resolve) => {
+    if (!imageUrl || typeof Image === 'undefined') {
+      resolve(DEFAULT_TARGET_SIZE);
+      return;
+    }
+
+    const image = new Image();
+    image.onload = () => resolve(getTargetSizeFromAspect(image.naturalWidth / image.naturalHeight));
+    image.onerror = () => resolve(DEFAULT_TARGET_SIZE);
+    image.src = imageUrl;
+  });
+}
+
+function applyTextureCover(texture, sourceAspect, targetAspect) {
+  if (!texture || !Number.isFinite(sourceAspect) || !Number.isFinite(targetAspect)) return;
+  if (sourceAspect <= 0 || targetAspect <= 0) return;
+
+  texture.repeat.set(1, 1);
+  texture.offset.set(0, 0);
+
+  if (sourceAspect > targetAspect) {
+    const repeatX = targetAspect / sourceAspect;
+    texture.repeat.x = repeatX;
+    texture.offset.x = (1 - repeatX) / 2;
+  } else if (sourceAspect < targetAspect) {
+    const repeatY = sourceAspect / targetAspect;
+    texture.repeat.y = repeatY;
+    texture.offset.y = (1 - repeatY) / 2;
+  }
+
+  texture.needsUpdate = true;
+}
+
 function ensureMp4FileName(fileName, fallbackName) {
   const trimmedName = typeof fileName === 'string' ? fileName.trim() : '';
   const safeName = trimmedName || fallbackName;
@@ -1203,13 +1245,18 @@ export default function MindARFrameApi({
       : resp?.videoUrlV1
         ? [resp.videoUrlV1]
         : [];
-    const normalizedTargetVideos = targetVideosRaw
+    const responseTargetImageUrl = joinCdn(
+      cdnBase,
+      resp?.imageUrl || resp?.image || resp?.thumbnailUrl || resp?.thumbnail || resp?.coverUrl
+    );
+    const normalizedTargetVideosBase = targetVideosRaw
       .map((item, index) => {
         if (typeof item === 'string') {
           return {
             targetIndex: index,
             videoUrl: joinCdn(cdnBase, item),
             shape: shapeVal,
+            targetImageUrl: responseTargetImageUrl,
           };
         }
 
@@ -1220,9 +1267,19 @@ export default function MindARFrameApi({
           targetIndex: typeof item.targetIndex === 'number' ? item.targetIndex : index,
           videoUrl: joinCdn(cdnBase, item.videoUrl || item.url || item.videoUrlV1 || item.video),
           shape: item.shape ?? shapeVal,
+          targetImageUrl: joinCdn(
+            cdnBase,
+            item.imageUrl || item.image || item.thumbnailUrl || item.thumbnail || item.coverUrl
+          ),
         };
       })
       .filter((item) => !!item?.videoUrl);
+    const normalizedTargetVideos = await Promise.all(
+      normalizedTargetVideosBase.map(async (item) => ({
+        ...item,
+        targetSize: await getImageSize(item.targetImageUrl),
+      }))
+    );
     const normalizedAudioUrls = targetVideosRaw
       .map((item) => {
         if (!item || typeof item !== 'object') return null;
@@ -1249,6 +1306,8 @@ export default function MindARFrameApi({
         targetIndex: typeof resp?.targetIndex === 'number' ? resp.targetIndex : 0,
         videoUrl: legacyVideoUrl,
         shape: shapeVal,
+        targetImageUrl: responseTargetImageUrl,
+        targetSize: await getImageSize(responseTargetImageUrl),
       });
     }
 
@@ -1351,7 +1410,12 @@ export default function MindARFrameApi({
               ? res.targetIndexes[0]
               : fallbackTargetIndex;
 
-        targetVideos = [{ targetIndex: idx, videoUrl: fallbackVideoUrl, shape: res?.frameShape ?? 0 }];
+        targetVideos = [{
+          targetIndex: idx,
+          videoUrl: fallbackVideoUrl,
+          shape: res?.frameShape ?? 0,
+          targetSize: DEFAULT_TARGET_SIZE,
+        }];
       }
 
       const idxLabel = targetVideos.map((target) => target.targetIndex).join(',');
@@ -1374,7 +1438,12 @@ export default function MindARFrameApi({
     }
   };
 
-  const addOrUpdateAnchorVideo = async ({ targetIndex, videoUrl, shape = 0 }) => {
+  const addOrUpdateAnchorVideo = async ({
+    targetIndex,
+    videoUrl,
+    shape = 0,
+    targetSize = DEFAULT_TARGET_SIZE,
+  }) => {
     if (!mindarRef.current) return;
     if (!videoUrl) throw new Error('videoUrl is required for overlay.');
 
@@ -1393,6 +1462,23 @@ export default function MindARFrameApi({
       video.crossOrigin = 'anonymous';
       video.load();
       await waitForVideoMetadataSoft(video);
+      const nextAspect =
+        video.videoWidth && video.videoHeight ? video.videoWidth / video.videoHeight : 16 / 9;
+      const safeTargetSize =
+        targetSize &&
+        Number.isFinite(targetSize.width) &&
+        Number.isFinite(targetSize.height) &&
+        targetSize.width > 0 &&
+        targetSize.height > 0
+          ? targetSize
+          : DEFAULT_TARGET_SIZE;
+      const planeWidth = safeTargetSize.width * TARGET_VIDEO_OVERSCAN;
+      const planeHeight = safeTargetSize.height * TARGET_VIDEO_OVERSCAN;
+      applyTextureCover(existing.videoTexture, nextAspect, planeWidth / planeHeight);
+      try {
+        existing.plane.geometry.dispose();
+      } catch (_) {}
+      existing.plane.geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
       try {
         video.pause();
       } catch (_) {}
@@ -1423,8 +1509,19 @@ export default function MindARFrameApi({
         : 16 / 9;
     const videoTexture = new THREE.VideoTexture(overlayVideo);
     setVideoTextureSRGB(videoTexture);
+    const safeTargetSize =
+      targetSize &&
+      Number.isFinite(targetSize.width) &&
+      Number.isFinite(targetSize.height) &&
+      targetSize.width > 0 &&
+      targetSize.height > 0
+        ? targetSize
+        : DEFAULT_TARGET_SIZE;
+    const planeWidth = safeTargetSize.width * TARGET_VIDEO_OVERSCAN;
+    const planeHeight = safeTargetSize.height * TARGET_VIDEO_OVERSCAN;
+    applyTextureCover(videoTexture, aspect, planeWidth / planeHeight);
 
-    const geometry = new THREE.PlaneGeometry(1, 1 / aspect);
+    const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
     let material = null;
     let maskTexture = null;
     const maskUrl = getMaskUrlForShape(shape, cdnBase);
@@ -1622,6 +1719,7 @@ export default function MindARFrameApi({
           targetIndex,
           videoUrl: vurl,
           shape: targetVideo?.shape ?? 0,
+          targetSize: targetVideo?.targetSize ?? DEFAULT_TARGET_SIZE,
         });
       }
 
