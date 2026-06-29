@@ -29,6 +29,8 @@ const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
 const TARGET_VIDEO_OVERSCAN_X = 1.28
 const TARGET_VIDEO_OVERSCAN_Y = 1.08
 const TARGET_LOST_GRACE_MS = 2500
+const SCAN_STATUS_SEARCHING = 'Searching image...'
+const SCAN_STATUS_LOADING_MAGIC = 'Loading magic...'
 
 const getTargetSize = imageUrl => new Promise((resolve) => {
   const image = new Image()
@@ -107,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const video = document.querySelector('#magic-video')
   const appLoader = document.querySelector('#customLoader')
   const scanOverlay = document.querySelector('#scanOverlay')
+  const scanStatusText = document.querySelector('#scanStatusText')
   const videoLoader = document.querySelector('#videoLoader')
   const videoLoaderText = document.querySelector('#videoLoaderText')
   const timeoutOverlay = document.querySelector('#identificationTimeout')
@@ -135,6 +138,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const hideAppLoader = () => {
     appLoader.classList.add('is-hidden')
+  }
+
+  const setScanStatus = (message) => {
+    if (scanStatusText) scanStatusText.textContent = message
   }
 
   const showVideoLoader = (message = 'Buffering video...') => {
@@ -169,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelIdentificationRestart()
     applyingMatch = false
     playingTargetName = ''
+    setScanStatus(SCAN_STATUS_SEARCHING)
     scanOverlay?.classList.remove('is-hidden')
 
     identificationRestartTimer = window.setTimeout(() => {
@@ -219,6 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   window.addEventListener('imageidentificationtimeout', () => {
+    setScanStatus(SCAN_STATUS_SEARCHING)
     scanOverlay?.classList.add('is-hidden')
     timeoutOverlay?.classList.add('is-visible')
     timeoutOverlay?.setAttribute('aria-hidden', 'false')
@@ -228,6 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
   tryAgainButton?.addEventListener('click', () => {
     timeoutOverlay?.classList.remove('is-visible')
     timeoutOverlay?.setAttribute('aria-hidden', 'true')
+    setScanStatus(SCAN_STATUS_SEARCHING)
     scanOverlay?.classList.remove('is-hidden')
     window.dispatchEvent(new Event('imageidentificationresume'))
   })
@@ -298,6 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (signature === activeMatchSignature) return
 
     applyingMatch = true
+    setScanStatus(SCAN_STATUS_LOADING_MAGIC)
     showVideoLoader('Loading matched experience...')
 
     Promise.all(entries.map(loadImageTarget))
@@ -313,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .catch((error) => {
         applyingMatch = false
+        setScanStatus(SCAN_STATUS_SEARCHING)
         hideVideoLoader()
         window.dispatchEvent(new Event('imageidentificationresume'))
         console.error('[magic] Could not load matched target:', error)
