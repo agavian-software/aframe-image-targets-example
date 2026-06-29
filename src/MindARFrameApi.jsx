@@ -246,6 +246,8 @@ function joinCdn(base, maybePath) {
 
 const DEFAULT_TARGET_SIZE = { width: 1, height: 1 };
 const TARGET_VIDEO_OVERSCAN = 1.04;
+const API_CALL_INTERVAL_MS = 2000;
+const LOADING_MAGIC_TEXT = 'Loading magic...';
 
 function getTargetSizeFromAspect(aspect) {
   if (!Number.isFinite(aspect) || aspect <= 0) return DEFAULT_TARGET_SIZE;
@@ -495,6 +497,7 @@ export default function MindARFrameApi({
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioImageUrl, setAudioImageUrl] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isLoadingMagic, setIsLoadingMagic] = useState(false);
   const [debug, setDebug] = useState({
     tick: 0,
     lastCapture: '-',
@@ -750,6 +753,7 @@ export default function MindARFrameApi({
 
       apiInFlightRef.current = false;
       anyMindTargetFoundRef.current = false;
+      setIsLoadingMagic(false);
       clearPreviews();
       clearContainer();
       setError(null);
@@ -783,6 +787,7 @@ export default function MindARFrameApi({
       await teardownMindAROnly();
       apiInFlightRef.current = false;
       anyMindTargetFoundRef.current = false;
+      setIsLoadingMagic(false);
       setError(null);
       setHasActiveMindTarget(false);
       await startCameraOnly();
@@ -1396,6 +1401,7 @@ export default function MindARFrameApi({
       if (!ok200) {
         setDebug((prev) => ({ ...prev, api: 'non-200' }));
         setStatus('Searching image...');
+        setIsLoadingMagic(false);
         return;
       }
 
@@ -1425,7 +1431,8 @@ export default function MindARFrameApi({
         mindFile,
         lastTargetIndex: idxLabel || '-',
       }));
-      setStatus('Found. Loading AR...');
+      setIsLoadingMagic(true);
+      setStatus(LOADING_MAGIC_TEXT);
       postArAnalytics({ customerCode: res?.customerCode, customerId: res?.customerId });
 
       await startMindARWithMindFile(mindFile, targetVideos);
@@ -1433,6 +1440,7 @@ export default function MindARFrameApi({
       console.error(e);
       setDebug((prev) => ({ ...prev, api: 'err', apiHttp: 'ERR' }));
       setStatus('Searching image...');
+      setIsLoadingMagic(false);
     } finally {
       apiInFlightRef.current = false;
     }
@@ -1591,6 +1599,7 @@ export default function MindARFrameApi({
       stateObj.smoothGroup.visible = true;
       stateObj.needsSnap = !!snapOnFound;
       setHasActiveMindTarget(true);
+      setIsLoadingMagic(false);
       await pauseAllExcept(targetIndex);
       setStatus(`Target ${targetIndex} detected`);
 
@@ -1672,6 +1681,7 @@ export default function MindARFrameApi({
     stopAllMindarAnchors();
     anyMindTargetFoundRef.current = false;
     setHasActiveMindTarget(false);
+    setIsLoadingMagic(true);
     removeMindarUiOverlays();
     setUi('mindar');
     currentMindFileRef.current = mindFile;
@@ -1756,6 +1766,7 @@ export default function MindARFrameApi({
     } catch (e) {
       setDebug((prev) => ({ ...prev, usingMind: false }));
       setError(e?.message || 'MindAR start failed.');
+      setIsLoadingMagic(false);
 
       try {
         await teardownMindAROnly();
@@ -1779,7 +1790,7 @@ export default function MindARFrameApi({
       return;
     }
 
-    const delay = Math.min(2000, remaining);
+    const delay = Math.min(API_CALL_INTERVAL_MS, remaining);
     cameraCaptureTimeoutRef.current = setTimeout(async () => {
       try {
         if (uiStateRef.current !== 'running') return;
@@ -1817,6 +1828,7 @@ export default function MindARFrameApi({
     setError(null);
     setUi('running');
     setHasActiveMindTarget(false);
+    setIsLoadingMagic(false);
     setStatus('Searching image...');
     clearPreviews();
     stopCameraScanTimers();
@@ -1930,6 +1942,7 @@ export default function MindARFrameApi({
   }, [audioUrl, uiState]);
 
   const scanBoxPx = Math.max(160, Math.min(360, Number(scanOverlayBoxSize) || 260));
+  const scanOverlayLabel = isLoadingMagic ? LOADING_MAGIC_TEXT : scanOverlayText || 'Searching image...';
   const logoSrc = websiteDetails?.websiteLogoUrl
     ? `${fileUrlLogo || ''}${websiteDetails.websiteLogoUrl}`
     : overlayLogoSrc;
@@ -2200,7 +2213,7 @@ export default function MindARFrameApi({
                   }}
                 />
                 <div style={{ fontWeight: 900, fontSize: 13 }}>
-                  {scanOverlayText || 'Searching image...'}
+                  {scanOverlayLabel}
                 </div>
               </div>
 
