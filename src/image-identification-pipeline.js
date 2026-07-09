@@ -1,4 +1,4 @@
-const DEFAULT_CAPTURE_INTERVAL_MS = 2000
+const DEFAULT_CAPTURE_INTERVAL_MS = 4000
 const DEFAULT_IDENTIFICATION_TIMEOUT_MS = 30000
 const DEFAULT_API_URL = 'https://backend.agavian.in/ecommerce/magic/v1/image/match'
 const DEFAULT_PROCESSING_WIDTH = 480
@@ -208,6 +208,8 @@ const imageIdentificationPipelineModule = () => {
           return
         }
 
+        matchFound = true
+        stopPendingRequest()
         window.dispatchEvent(
           new CustomEvent('imageidentified', {
             detail: unwrapMagicResponse(body),

@@ -144,8 +144,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (scanStatusText) scanStatusText.textContent = message
   }
 
-  const showVideoLoader = (message = 'Buffering video...') => {
-    if (!playingTargetName) {
+  const showVideoLoader = (message = 'Buffering video...', force = false) => {
+    if (!force && !playingTargetName) {
       return
     }
 
@@ -308,8 +308,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (signature === activeMatchSignature) return
 
     applyingMatch = true
+    window.dispatchEvent(new Event('imageidentificationpause'))
     setScanStatus(SCAN_STATUS_LOADING_MAGIC)
-    showVideoLoader('Loading matched experience...')
+    scanOverlay?.classList.add('is-hidden')
+    showVideoLoader('Loading matched experience...', true)
 
     Promise.all(entries.map(loadImageTarget))
       .then((matches) => {
@@ -318,7 +320,6 @@ document.addEventListener('DOMContentLoaded', () => {
         activeMatchSignature = signature
 
         XR8.XrController.configure({imageTargetData: matches.map(({targetData}) => targetData)})
-        scanOverlay?.classList.remove('is-hidden')
         hideVideoLoader()
         console.log('[magic] Loaded image targets:', matches.map(({targetName}) => targetName))
       })

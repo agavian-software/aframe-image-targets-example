@@ -246,7 +246,8 @@ function joinCdn(base, maybePath) {
 
 const DEFAULT_TARGET_SIZE = { width: 1, height: 1 };
 const TARGET_VIDEO_OVERSCAN = 1.04;
-const API_CALL_INTERVAL_MS = 2000;
+const DESKTOP_API_CALL_INTERVAL_MS = 3000;
+const MOBILE_API_CALL_INTERVAL_MS = 5000;
 const LOADING_MAGIC_TEXT = 'Loading magic...';
 
 function getTargetSizeFromAspect(aspect) {
@@ -301,6 +302,10 @@ export function isMobileLike() {
     'ontouchstart' in window ||
     navigator.maxTouchPoints > 0
   );
+}
+
+function getApiCallIntervalMs() {
+  return isMobileLike() ? MOBILE_API_CALL_INTERVAL_MS : DESKTOP_API_CALL_INTERVAL_MS;
 }
 
 function normalizeCropMargins({ cropMargin = 0, cropMargins = null }) {
@@ -1431,6 +1436,7 @@ export default function MindARFrameApi({
         mindFile,
         lastTargetIndex: idxLabel || '-',
       }));
+      stopCameraScanTimers();
       setIsLoadingMagic(true);
       setStatus(LOADING_MAGIC_TEXT);
       postArAnalytics({ customerCode: res?.customerCode, customerId: res?.customerId });
@@ -1703,7 +1709,7 @@ export default function MindARFrameApi({
         }
       } catch (_) {}
 
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileLike() ? 1.25 : 2));
       setRendererSRGBOutput(renderer);
       renderer.toneMapping = THREE.NoToneMapping;
       renderer.domElement.style.position = 'absolute';
@@ -1790,7 +1796,7 @@ export default function MindARFrameApi({
       return;
     }
 
-    const delay = Math.min(API_CALL_INTERVAL_MS, remaining);
+    const delay = Math.min(getApiCallIntervalMs(), remaining);
     cameraCaptureTimeoutRef.current = setTimeout(async () => {
       try {
         if (uiStateRef.current !== 'running') return;
@@ -1806,7 +1812,7 @@ export default function MindARFrameApi({
           cropMargins,
         });
 
-        pushFramePreview(frameFile);
+        if (debugFlag === 'true') pushFramePreview(frameFile);
         setDebug((prev) => ({
           ...prev,
           tick: (prev.tick || 0) + 1,
@@ -2149,7 +2155,52 @@ export default function MindARFrameApi({
         </div>
       </div>
 
+      {isLoadingMagic && (uiState === 'running' || uiState === 'mindar') && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1500,
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0,0,0,0.18)',
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              color: '#fff',
+              background: 'rgba(0,0,0,0.72)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: 16,
+              padding: '13px 16px',
+              boxShadow: '0 14px 36px rgba(0,0,0,0.24)',
+            }}
+          >
+            <div
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: 999,
+                border: '2px solid rgba(255,255,255,0.35)',
+                borderTopColor: 'rgba(255,255,255,0.95)',
+                animation: 'spinMindScan 0.8s linear infinite',
+              }}
+              aria-hidden="true"
+            />
+            <div style={{ fontWeight: 900, fontSize: 14 }}>{LOADING_MAGIC_TEXT}</div>
+          </div>
+        </div>
+      )}
+
       {showScanOverlay &&
+        !isLoadingMagic &&
         (uiState === 'running' || (uiState === 'mindar' && !hasActiveMindTarget)) && (
           <div
             style={{
