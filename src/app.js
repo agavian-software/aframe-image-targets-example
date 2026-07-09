@@ -182,15 +182,15 @@ document.addEventListener('DOMContentLoaded', () => {
     identificationRestartTimer = window.setTimeout(() => {
       identificationRestartTimer = null
       window.dispatchEvent(new Event('imageidentificationresume'))
-      console.log('[magic] Video stopped; image identification resumed after 4 seconds.')
-    }, 4000)
+      console.log('[magic] Video stopped; image identification resumed immediately.')
+    }, 0)
   }
 
   scene.addEventListener('realityready', hideAppLoader, {once: true})
 
   // Avoid leaving the custom overlay above permission or runtime messages forever.
   scene.addEventListener('loaded', () => {
-    window.setTimeout(hideAppLoader, 8000)
+    window.setTimeout(hideAppLoader, 2500)
   }, {once: true})
 
   video.pause()
