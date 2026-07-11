@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeMatchSignature = ''
   let playingTargetName = ''
   let applyingMatch = false
+  let videoTransitioning = false
   let identificationRestartTimer = null
   let targetLostTimer = null
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -144,8 +145,31 @@ document.addEventListener('DOMContentLoaded', () => {
     if (scanStatusText) scanStatusText.textContent = message
   }
 
+  const setAllLoadingPanelsVisible = (visible) => {
+    targetExperiences.forEach(({loadingPanel}) => {
+      loadingPanel?.setAttribute('visible', visible)
+    })
+  }
+
+  const setTargetLoadingVisible = (targetName, visible, message = 'Loading video...') => {
+    const experience = targetExperiences.get(targetName)
+    if (!experience?.loadingPanel) return false
+
+    experience.loadingPanel.setAttribute('visible', visible)
+    if (experience.loadingText) {
+      experience.loadingText.setAttribute('text', 'value', message)
+    }
+    return true
+  }
+
   const showVideoLoader = (message = 'Buffering video...', force = false) => {
     if (!force && !playingTargetName) {
+      return
+    }
+
+    if (playingTargetName && setTargetLoadingVisible(playingTargetName, true, message)) {
+      videoLoader.classList.remove('is-visible')
+      videoLoader.setAttribute('aria-hidden', 'true')
       return
     }
 
@@ -155,8 +179,33 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const hideVideoLoader = () => {
+    setAllLoadingPanelsVisible(false)
     videoLoader.classList.remove('is-visible')
     videoLoader.setAttribute('aria-hidden', 'true')
+  }
+
+  const setAllVideoPlanesVisible = (visible) => {
+    targetExperiences.forEach(({plane}) => {
+      plane?.setAttribute('visible', visible)
+    })
+  }
+
+  const setTargetPlaneVisible = (targetName, visible) => {
+    targetExperiences.get(targetName)?.plane?.setAttribute('visible', visible)
+  }
+
+  const revealPlayingTarget = () => {
+    if (!playingTargetName) return
+    videoTransitioning = false
+    setAllVideoPlanesVisible(false)
+    setAllLoadingPanelsVisible(false)
+    setTargetPlaneVisible(playingTargetName, true)
+  }
+
+  const clearVideoFrame = () => {
+    video.pause()
+    video.removeAttribute('src')
+    video.load()
   }
 
   const cancelIdentificationRestart = () => {
@@ -176,6 +225,9 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelIdentificationRestart()
     applyingMatch = false
     playingTargetName = ''
+    videoTransitioning = false
+    setAllVideoPlanesVisible(false)
+    setAllLoadingPanelsVisible(false)
     setScanStatus(SCAN_STATUS_SEARCHING)
     scanOverlay?.classList.remove('is-hidden')
 
@@ -203,15 +255,24 @@ document.addEventListener('DOMContentLoaded', () => {
     targetVideo.addEventListener('loadstart', () => showVideoLoader('Loading video...'))
     targetVideo.addEventListener('waiting', () => showVideoLoader('Buffering video...'))
     targetVideo.addEventListener('stalled', () => showVideoLoader('Connection is slow...'))
-    targetVideo.addEventListener('canplay', hideVideoLoader)
+    targetVideo.addEventListener('canplay', () => {
+      revealPlayingTarget()
+      hideVideoLoader()
+    })
     targetVideo.addEventListener('playing', () => {
+      revealPlayingTarget()
       hideVideoLoader()
       window.dispatchEvent(new Event('imageidentificationpause'))
       console.log('[magic] Video is playing; identification paused.')
     })
-    targetVideo.addEventListener('pause', hideVideoLoader)
+    targetVideo.addEventListener('pause', () => {
+      if (!videoTransitioning) hideVideoLoader()
+    })
     targetVideo.addEventListener('ended', restartIdentificationAfterVideo)
-    targetVideo.addEventListener('error', () => showVideoLoader('Video could not be loaded'))
+    targetVideo.addEventListener('error', () => {
+      videoTransitioning = false
+      showVideoLoader('Video could not be loaded')
+    })
   }
 
   bindVideoEvents(video)
@@ -248,7 +309,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const clearTargetExperiences = () => {
     cancelTargetLostTimer()
-    video.pause()
+    videoTransitioning = false
+    playingTargetName = ''
+    clearVideoFrame()
     targetExperiences.forEach(({target}, targetName) => {
       if (targetName === target.dataset.magicTargetName && target.id === 'magic-image-target') {
         target.removeAttribute('xrextras-named-image-target')
@@ -259,7 +322,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     })
     targetExperiences.clear()
-    playingTargetName = ''
   }
 
   const createTargetExperience = (match, index) => {
@@ -276,6 +338,8 @@ document.addEventListener('DOMContentLoaded', () => {
       target.appendChild(plane)
     }
 
+    target.querySelectorAll('.magic-target-loader').forEach(loader => loader.remove())
+
     const targetSize = match.targetSize || DEFAULT_TARGET_SIZE
     const width = targetSize.width * TARGET_VIDEO_OVERSCAN_X
     const height = targetSize.height * TARGET_VIDEO_OVERSCAN_Y
@@ -285,6 +349,56 @@ document.addEventListener('DOMContentLoaded', () => {
       width,
     })
     plane.setAttribute('geometry', {primitive: 'plane', height, width})
+    plane.setAttribute('visible', false)
+
+    const loadingPanel = document.createElement('a-entity')
+    const loadingBackground = document.createElement('a-entity')
+    const loadingRing = document.createElement('a-ring')
+    const loadingText = document.createElement('a-entity')
+
+    loadingPanel.setAttribute('visible', false)
+    loadingPanel.classList.add('magic-target-loader')
+    loadingBackground.setAttribute('geometry', {
+      primitive: 'plane',
+      height,
+      width,
+    })
+    loadingBackground.setAttribute('material', {
+      color: '#05070c',
+      opacity: 0.78,
+      transparent: true,
+      shader: 'flat',
+    })
+    loadingBackground.setAttribute('position', '0 0 0.004')
+    loadingRing.setAttribute('radius-inner', Math.min(width, height) * 0.035)
+    loadingRing.setAttribute('radius-outer', Math.min(width, height) * 0.052)
+    loadingRing.setAttribute('theta-length', 270)
+    loadingRing.setAttribute('material', {
+      color: '#ffffff',
+      opacity: 0.95,
+      shader: 'flat',
+    })
+    loadingRing.setAttribute('position', `0 ${height * 0.11} 0.008`)
+    loadingRing.setAttribute('animation', {
+      property: 'rotation',
+      to: '0 0 360',
+      loop: true,
+      dur: 900,
+      easing: 'linear',
+    })
+    loadingText.setAttribute('text', {
+      value: 'Loading video...',
+      align: 'center',
+      anchor: 'center',
+      baseline: 'center',
+      color: '#ffffff',
+      width: Math.max(width * 1.45, 1.2),
+    })
+    loadingText.setAttribute('position', `0 ${height * -0.04} 0.009`)
+    loadingPanel.appendChild(loadingBackground)
+    loadingPanel.appendChild(loadingRing)
+    loadingPanel.appendChild(loadingText)
+    target.appendChild(loadingPanel)
 
     if (index > 0) {
       target.id = `magic-image-target-${index}`
@@ -294,6 +408,9 @@ document.addEventListener('DOMContentLoaded', () => {
     bindImageTargetName(target, match.targetName)
     targetExperiences.set(match.targetName, {
       target,
+      plane,
+      loadingPanel,
+      loadingText,
       videoUrl: match.videoUrl,
     })
   }
@@ -345,9 +462,15 @@ document.addEventListener('DOMContentLoaded', () => {
     updateSoundButton()
 
     if (targetChanged || video.src !== experience.videoUrl) {
-      video.pause()
+      videoTransitioning = true
+      setAllVideoPlanesVisible(false)
+      setAllLoadingPanelsVisible(false)
+      showVideoLoader('Starting video...', true)
+      clearVideoFrame()
       video.src = experience.videoUrl
       video.load()
+    } else if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      revealPlayingTarget()
     }
 
     if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
@@ -357,6 +480,9 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('[magic] Target detected:', event.detail.name, experience.videoUrl)
     video.play().catch((error) => {
       playingTargetName = ''
+      videoTransitioning = false
+      setAllVideoPlanesVisible(false)
+      setAllLoadingPanelsVisible(false)
       hideVideoLoader()
       console.error('[magic] Video playback failed:', error)
     })
@@ -368,6 +494,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (playingTargetName !== event.detail.name) return
 
     hideVideoLoader()
+    setTargetPlaneVisible(event.detail.name, false)
+    setTargetLoadingVisible(event.detail.name, false)
 
     cancelTargetLostTimer()
     targetLostTimer = window.setTimeout(() => {
