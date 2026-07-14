@@ -24,10 +24,10 @@ const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
 
 const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
 // Overlap the tracked boundary so pose jitter/cropping never reveals a rim.
-// The generated target/video pairs are usually portrait, and the video plane
-// was leaving side gutters, so horizontal overscan is intentionally stronger.
-const TARGET_VIDEO_OVERSCAN_X = 1.28
-const TARGET_VIDEO_OVERSCAN_Y = 1.08
+// Landscape targets need vertical overscan; portrait targets need horizontal overscan.
+const TARGET_VIDEO_PORTRAIT_OVERSCAN = {x: 1.28, y: 1.08}
+const TARGET_VIDEO_LANDSCAPE_OVERSCAN = {x: 1.35, y: 1.35}
+const TARGET_VIDEO_SQUARE_OVERSCAN = {x: 1.12, y: 1.12}
 const TARGET_LOST_GRACE_MS = 2500
 const SCAN_STATUS_SEARCHING = 'Searching image...'
 const SCAN_STATUS_LOADING_MAGIC = 'Loading magic...'
@@ -50,6 +50,142 @@ const getTargetSize = imageUrl => new Promise((resolve) => {
   image.onerror = () => resolve(DEFAULT_TARGET_SIZE)
   image.src = imageUrl
 })
+
+const getVideoPlaneSize = (targetSize = DEFAULT_TARGET_SIZE) => {
+  const safeTargetSize = targetSize &&
+    Number.isFinite(targetSize.width) &&
+    Number.isFinite(targetSize.height) &&
+    targetSize.width > 0 &&
+    targetSize.height > 0
+    ? targetSize
+    : DEFAULT_TARGET_SIZE
+
+  const aspect = safeTargetSize.width / safeTargetSize.height
+  const overscan = Math.abs(aspect - 1) < 0.04
+    ? TARGET_VIDEO_SQUARE_OVERSCAN
+    : aspect > 1
+      ? TARGET_VIDEO_LANDSCAPE_OVERSCAN
+      : TARGET_VIDEO_PORTRAIT_OVERSCAN
+
+  return {
+    width: safeTargetSize.width * overscan.x,
+    height: safeTargetSize.height * overscan.y,
+  }
+}
+
+const getCoverTextureTransform = (sourceAspect, targetAspect) => {
+  if (!Number.isFinite(sourceAspect) || !Number.isFinite(targetAspect)) {
+    return {repeatX: 1, repeatY: 1, offsetX: 0, offsetY: 0}
+  }
+  if (sourceAspect <= 0 || targetAspect <= 0) {
+    return {repeatX: 1, repeatY: 1, offsetX: 0, offsetY: 0}
+  }
+
+  if (sourceAspect > targetAspect) {
+    const repeatX = targetAspect / sourceAspect
+    return {
+      repeatX,
+      repeatY: 1,
+      offsetX: (1 - repeatX) / 2,
+      offsetY: 0,
+    }
+  }
+
+  if (sourceAspect < targetAspect) {
+    const repeatY = sourceAspect / targetAspect
+    return {
+      repeatX: 1,
+      repeatY,
+      offsetX: 0,
+      offsetY: (1 - repeatY) / 2,
+    }
+  }
+
+  return {repeatX: 1, repeatY: 1, offsetX: 0, offsetY: 0}
+}
+
+const registerMagicTargetVideoCover = () => {
+  if (!window.AFRAME || window.AFRAME.components['magic-target-video-cover']) return
+
+  window.AFRAME.registerComponent('magic-target-video-cover', {
+    schema: {
+      video: {type: 'selector'},
+      width: {type: 'number', default: 1},
+      height: {type: 'number', default: 1},
+    },
+
+    init() {
+      this.videoTexture = null
+      this.material = null
+      this.mesh = null
+      this.onMetadata = this.updateTextureCover.bind(this)
+    },
+
+    update() {
+      const THREE = window.AFRAME.THREE
+      const video = this.data.video
+      if (!THREE || !video) return
+
+      if (!this.videoTexture || this.videoTexture.image !== video) {
+        this.videoTexture?.dispose?.()
+        this.videoTexture = new THREE.VideoTexture(video)
+        this.videoTexture.minFilter = THREE.LinearFilter
+        this.videoTexture.magFilter = THREE.LinearFilter
+        this.videoTexture.format = THREE.RGBAFormat
+        this.videoTexture.generateMipmaps = false
+        if ('colorSpace' in this.videoTexture && THREE.SRGBColorSpace) {
+          this.videoTexture.colorSpace = THREE.SRGBColorSpace
+        } else if ('encoding' in this.videoTexture && THREE.sRGBEncoding) {
+          this.videoTexture.encoding = THREE.sRGBEncoding
+        }
+      }
+
+      if (!this.material) {
+        this.material = new THREE.MeshBasicMaterial({
+          map: this.videoTexture,
+          side: THREE.DoubleSide,
+          transparent: true,
+        })
+      } else {
+        this.material.map = this.videoTexture
+        this.material.needsUpdate = true
+      }
+
+      const geometry = new THREE.PlaneGeometry(this.data.width, this.data.height)
+      if (!this.mesh) {
+        this.mesh = new THREE.Mesh(geometry, this.material)
+        this.el.setObject3D('mesh', this.mesh)
+      } else {
+        this.mesh.geometry?.dispose?.()
+        this.mesh.geometry = geometry
+      }
+
+      video.removeEventListener('loadedmetadata', this.onMetadata)
+      video.addEventListener('loadedmetadata', this.onMetadata)
+      this.updateTextureCover()
+    },
+
+    updateTextureCover() {
+      const video = this.data.video
+      if (!video?.videoWidth || !video?.videoHeight || !this.videoTexture) return
+
+      const sourceAspect = video.videoWidth / video.videoHeight
+      const targetAspect = this.data.width / this.data.height
+      const {repeatX, repeatY, offsetX, offsetY} = getCoverTextureTransform(sourceAspect, targetAspect)
+      this.videoTexture.repeat.set(repeatX, repeatY)
+      this.videoTexture.offset.set(offsetX, offsetY)
+      this.videoTexture.needsUpdate = true
+    },
+
+    remove() {
+      this.data.video?.removeEventListener('loadedmetadata', this.onMetadata)
+      this.el.removeObject3D('mesh')
+      this.mesh?.geometry?.dispose?.()
+      this.material?.dispose?.()
+      this.videoTexture?.dispose?.()
+    },
+  })
+}
 
 const bindImageTargetName = (target, targetName) => {
   if (!target) return
@@ -105,6 +241,8 @@ const onxrloaded = () => {
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
 
 document.addEventListener('DOMContentLoaded', () => {
+  registerMagicTargetVideoCover()
+
   const scene = document.querySelector('a-scene')
   const video = document.querySelector('#magic-video')
   const appLoader = document.querySelector('#customLoader')
@@ -194,8 +332,19 @@ document.addEventListener('DOMContentLoaded', () => {
     targetExperiences.get(targetName)?.plane?.setAttribute('visible', visible)
   }
 
+  const applyVideoCoverToPlanes = () => {
+    targetExperiences.forEach(({plane, width, height}) => {
+      plane?.setAttribute('magic-target-video-cover', {
+        video: '#magic-video',
+        width,
+        height,
+      })
+    })
+  }
+
   const revealPlayingTarget = () => {
     if (!playingTargetName) return
+    applyVideoCoverToPlanes()
     videoTransitioning = false
     setAllVideoPlanesVisible(false)
     setAllLoadingPanelsVisible(false)
@@ -253,6 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const bindVideoEvents = (targetVideo) => {
     targetVideo.addEventListener('loadstart', () => showVideoLoader('Loading video...'))
+    targetVideo.addEventListener('loadedmetadata', applyVideoCoverToPlanes)
     targetVideo.addEventListener('waiting', () => showVideoLoader('Buffering video...'))
     targetVideo.addEventListener('stalled', () => showVideoLoader('Connection is slow...'))
     targetVideo.addEventListener('canplay', () => {
@@ -331,24 +481,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!target) throw new Error('Image target container is missing.')
 
-    let plane = target.querySelector('[xrextras-target-video-fade]')
+    let plane = target.querySelector('.magic-video-plane') ||
+      target.querySelector('[xrextras-target-video-fade]')
 
     if (!plane) {
       plane = document.createElement('a-entity')
       target.appendChild(plane)
     }
 
+    plane.classList.add('magic-video-plane')
+    plane.removeAttribute('xrextras-target-video-fade')
+    plane.removeAttribute('geometry')
+    plane.removeAttribute('material')
     target.querySelectorAll('.magic-target-loader').forEach(loader => loader.remove())
 
-    const targetSize = match.targetSize || DEFAULT_TARGET_SIZE
-    const width = targetSize.width * TARGET_VIDEO_OVERSCAN_X
-    const height = targetSize.height * TARGET_VIDEO_OVERSCAN_Y
-    plane.setAttribute('xrextras-target-video-fade', {
+    const {width, height} = getVideoPlaneSize(match.targetSize)
+    plane.setAttribute('magic-target-video-cover', {
       video: '#magic-video',
-      height,
       width,
+      height,
     })
-    plane.setAttribute('geometry', {primitive: 'plane', height, width})
     plane.setAttribute('visible', false)
 
     const loadingPanel = document.createElement('a-entity')
@@ -409,6 +561,8 @@ document.addEventListener('DOMContentLoaded', () => {
     targetExperiences.set(match.targetName, {
       target,
       plane,
+      width,
+      height,
       loadingPanel,
       loadingText,
       videoUrl: match.videoUrl,
