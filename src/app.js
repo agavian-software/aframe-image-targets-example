@@ -23,11 +23,6 @@ const getMagicEntries = (response) => {
 const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
 
 const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
-// Overlap the tracked boundary so pose jitter/cropping never reveals a rim.
-// Landscape targets need vertical overscan; portrait targets need horizontal overscan.
-const TARGET_VIDEO_PORTRAIT_OVERSCAN = {x: 1.28, y: 1.08}
-const TARGET_VIDEO_LANDSCAPE_OVERSCAN = {x: 1.35, y: 1.35}
-const TARGET_VIDEO_SQUARE_OVERSCAN = {x: 1.12, y: 1.12}
 const TARGET_LOST_GRACE_MS = 2500
 const SCAN_STATUS_SEARCHING = 'Searching image...'
 const SCAN_STATUS_LOADING_MAGIC = 'Loading magic...'
@@ -51,27 +46,15 @@ const getTargetSize = imageUrl => new Promise((resolve) => {
   image.src = imageUrl
 })
 
-const getVideoPlaneSize = (targetSize = DEFAULT_TARGET_SIZE) => {
-  const safeTargetSize = targetSize &&
+const getSafeTargetSize = (targetSize = DEFAULT_TARGET_SIZE) => (
+  targetSize &&
     Number.isFinite(targetSize.width) &&
     Number.isFinite(targetSize.height) &&
     targetSize.width > 0 &&
     targetSize.height > 0
     ? targetSize
     : DEFAULT_TARGET_SIZE
-
-  const aspect = safeTargetSize.width / safeTargetSize.height
-  const overscan = Math.abs(aspect - 1) < 0.04
-    ? TARGET_VIDEO_SQUARE_OVERSCAN
-    : aspect > 1
-      ? TARGET_VIDEO_LANDSCAPE_OVERSCAN
-      : TARGET_VIDEO_PORTRAIT_OVERSCAN
-
-  return {
-    width: safeTargetSize.width * overscan.x,
-    height: safeTargetSize.height * overscan.y,
-  }
-}
+)
 
 const getCoverTextureTransform = (sourceAspect, targetAspect) => {
   if (!Number.isFinite(sourceAspect) || !Number.isFinite(targetAspect)) {
@@ -495,7 +478,7 @@ document.addEventListener('DOMContentLoaded', () => {
     plane.removeAttribute('material')
     target.querySelectorAll('.magic-target-loader').forEach(loader => loader.remove())
 
-    const {width, height} = getVideoPlaneSize(match.targetSize)
+    const {width, height} = getSafeTargetSize(match.targetSize)
     plane.setAttribute('magic-target-video-cover', {
       video: '#magic-video',
       width,
