@@ -23,6 +23,7 @@ const getMagicEntries = (response) => {
 const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
 
 const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
+const TARGET_VIDEO_OVERSCAN = 1.04
 const TARGET_LOST_GRACE_MS = 2500
 const SCAN_STATUS_SEARCHING = 'Searching image...'
 const SCAN_STATUS_LOADING_MAGIC = 'Loading magic...'
@@ -37,10 +38,8 @@ const getTargetSize = imageUrl => new Promise((resolve) => {
       return
     }
 
-    // Image-target coordinates use the longest side as one unit.
-    resolve(aspect >= 1
-      ? {width: 1, height: 1 / aspect}
-      : {width: aspect, height: 1})
+    // Image-target coordinates use target height as one unit.
+    resolve({width: aspect, height: 1})
   }
   image.onerror = () => resolve(DEFAULT_TARGET_SIZE)
   image.src = imageUrl
@@ -478,7 +477,9 @@ document.addEventListener('DOMContentLoaded', () => {
     plane.removeAttribute('material')
     target.querySelectorAll('.magic-target-loader').forEach(loader => loader.remove())
 
-    const {width, height} = getSafeTargetSize(match.targetSize)
+    const targetSize = getSafeTargetSize(match.targetSize)
+    const width = targetSize.width * TARGET_VIDEO_OVERSCAN
+    const height = targetSize.height * TARGET_VIDEO_OVERSCAN
     plane.setAttribute('magic-target-video-cover', {
       video: '#magic-video',
       width,

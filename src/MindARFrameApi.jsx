@@ -252,7 +252,7 @@ const LOADING_MAGIC_TEXT = 'Loading magic...';
 
 function getTargetSizeFromAspect(aspect) {
   if (!Number.isFinite(aspect) || aspect <= 0) return DEFAULT_TARGET_SIZE;
-  return aspect >= 1 ? { width: 1, height: 1 / aspect } : { width: aspect, height: 1 };
+  return { width: aspect, height: 1 };
 }
 
 function getImageSize(imageUrl) {
