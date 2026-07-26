@@ -429,6 +429,19 @@ function getMagicResponse(action) {
   );
 }
 
+function getCustomerCodeFromUrl() {
+  if (typeof window === 'undefined') return '';
+
+  try {
+    const query = new URLSearchParams(window.location.search);
+    return normalizeAnalyticsCustomerCode(
+      query.get('code') || query.get('customerCode') || query.get('customer_code')
+    );
+  } catch (_) {
+    return '';
+  }
+}
+
 export default function MindARFrameApi({
   targetIndex: fallbackTargetIndex = 0,
   videoUrl: fallbackVideoUrl,
@@ -795,7 +808,7 @@ export default function MindARFrameApi({
       setIsLoadingMagic(false);
       setError(null);
       setHasActiveMindTarget(false);
-      await startCameraOnly();
+      await startFromCustomerCodeOrCamera();
     } finally {
       switchingRef.current = false;
     }
@@ -1227,17 +1240,7 @@ export default function MindARFrameApi({
     }
   };
 
-  async function dummyMindLookupApi({ frameFile }) {
-    const payload = {
-      frameShape: 0,
-      formData: frameFile,
-      mobileFlag: isMobileLike(),
-    };
-
-    const action = await dispatch(checkImage(payload));
-    if (action?.error) return { httpStatus: 500, ok: false };
-
-    const resp = getMagicResponse(action);
+  async function normalizeMagicLookupResponse(resp, httpStatus = 200) {
     const shapeVal = typeof resp?.frameShape === 'number' ? resp.frameShape : 0;
     const customerCode = normalizeAnalyticsCustomerCode(
       resp?.customerCode ?? resp?.customer?.customerCode ?? resp?.code
@@ -1330,7 +1333,7 @@ export default function MindARFrameApi({
       : [];
 
     return {
-      httpStatus: 200,
+      httpStatus,
       ok: !!mindFileUrl,
       mindFiles: mindFileUrl ? [mindFileUrl] : [],
       targetVideos: normalizedTargetVideos,
@@ -1342,6 +1345,52 @@ export default function MindARFrameApi({
       customerCode,
       customerId,
     };
+  }
+
+  async function dummyMindLookupApi({ frameFile }) {
+    const payload = {
+      frameShape: 0,
+      formData: frameFile,
+      mobileFlag: isMobileLike(),
+    };
+
+    const action = await dispatch(checkImage(payload));
+    if (action?.error) return { httpStatus: 500, ok: false };
+
+    return normalizeMagicLookupResponse(getMagicResponse(action), 200);
+  }
+
+  async function qrMindLookupApi(customerCode) {
+    const normalizedCustomerCode = normalizeAnalyticsCustomerCode(customerCode);
+    if (!normalizedCustomerCode) return { httpStatus: 400, ok: false };
+
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    if (!apiBaseUrl) {
+      throw new Error('NEXT_PUBLIC_API_URL is required for QR lookup.');
+    }
+
+    const tenantId = getAnalyticsTenantId();
+    const response = await fetch(
+      `${apiBaseUrl.replace(/\/+$/, '')}/ecommerce/magic/v1/image/qr?customerCode=${encodeURIComponent(
+        normalizedCustomerCode
+      )}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tenant-Id': tenantId,
+        },
+      }
+    );
+
+    const contentType = response.headers.get('content-type') || '';
+    const body = contentType.includes('application/json') ? await response.json() : await response.text();
+
+    if (!response.ok) {
+      throw new Error(`QR lookup failed with status ${response.status}`);
+    }
+
+    return normalizeMagicLookupResponse(getMagicResponse({ payload: body }), response.status);
   }
 
   const openAudioPlayer = async (nextAudioUrl, nextImageUrl = null) => {
@@ -1372,6 +1421,70 @@ export default function MindARFrameApi({
     }, 0);
   };
 
+  const applyMagicLookupResult = async (res) => {
+    const httpStatus = res?.httpStatus ?? (res?.ok ? 200 : 500);
+    setDebug((prev) => ({ ...prev, apiHttp: String(httpStatus) }));
+
+    if (httpStatus === 200 && res?.audioUrl) {
+      setDebug((prev) => ({
+        ...prev,
+        api: 'ok',
+        mindFile: '-',
+        lastTargetIndex: 'audio',
+      }));
+      setStatus('Found audio. Opening player...');
+      postArAnalytics({ customerCode: res?.customerCode, customerId: res?.customerId });
+      await openAudioPlayer(res.audioUrl, res.imageUrl);
+      return;
+    }
+
+    const ok200 =
+      httpStatus === 200 &&
+      res?.ok === true &&
+      Array.isArray(res.mindFiles) &&
+      res.mindFiles.length > 0;
+
+    if (!ok200) {
+      setDebug((prev) => ({ ...prev, api: 'non-200' }));
+      setStatus('Searching image...');
+      setIsLoadingMagic(false);
+      return;
+    }
+
+    const mindFile = res.mindFiles[0];
+    let targetVideos = Array.isArray(res?.targetVideos) ? res.targetVideos : [];
+
+    if (targetVideos.length === 0 && fallbackVideoUrl) {
+      const idx =
+        typeof res?.legacyTargetIndex === 'number'
+          ? res.legacyTargetIndex
+          : Array.isArray(res?.targetIndexes) && typeof res.targetIndexes[0] === 'number'
+            ? res.targetIndexes[0]
+            : fallbackTargetIndex;
+
+      targetVideos = [{
+        targetIndex: idx,
+        videoUrl: fallbackVideoUrl,
+        shape: res?.frameShape ?? 0,
+        targetSize: DEFAULT_TARGET_SIZE,
+      }];
+    }
+
+    const idxLabel = targetVideos.map((target) => target.targetIndex).join(',');
+    setDebug((prev) => ({
+      ...prev,
+      api: 'ok',
+      mindFile,
+      lastTargetIndex: idxLabel || '-',
+    }));
+    stopCameraScanTimers();
+    setIsLoadingMagic(true);
+    setStatus(LOADING_MAGIC_TEXT);
+    postArAnalytics({ customerCode: res?.customerCode, customerId: res?.customerId });
+
+    await startMindARWithMindFile(mindFile, targetVideos);
+  };
+
   const tryApiForMindFile = async ({ frameFile }) => {
     if (uiStateRef.current !== 'running' || apiInFlightRef.current) return;
 
@@ -1381,72 +1494,59 @@ export default function MindARFrameApi({
     try {
       setStatus('Calling API...');
       const res = await dummyMindLookupApi({ frameFile });
-      const httpStatus = res?.httpStatus ?? (res?.ok ? 200 : 500);
-      setDebug((prev) => ({ ...prev, apiHttp: String(httpStatus) }));
-
-      if (httpStatus === 200 && res?.audioUrl) {
-        setDebug((prev) => ({
-          ...prev,
-          api: 'ok',
-          mindFile: '-',
-          lastTargetIndex: 'audio',
-        }));
-        setStatus('Found audio. Opening player...');
-        postArAnalytics({ customerCode: res?.customerCode, customerId: res?.customerId });
-        await openAudioPlayer(res.audioUrl, res.imageUrl);
-        return;
-      }
-
-      const ok200 =
-        httpStatus === 200 &&
-        res?.ok === true &&
-        Array.isArray(res.mindFiles) &&
-        res.mindFiles.length > 0;
-
-      if (!ok200) {
-        setDebug((prev) => ({ ...prev, api: 'non-200' }));
-        setStatus('Searching image...');
-        setIsLoadingMagic(false);
-        return;
-      }
-
-      const mindFile = res.mindFiles[0];
-      let targetVideos = Array.isArray(res?.targetVideos) ? res.targetVideos : [];
-
-      if (targetVideos.length === 0 && fallbackVideoUrl) {
-        const idx =
-          typeof res?.legacyTargetIndex === 'number'
-            ? res.legacyTargetIndex
-            : Array.isArray(res?.targetIndexes) && typeof res.targetIndexes[0] === 'number'
-              ? res.targetIndexes[0]
-              : fallbackTargetIndex;
-
-        targetVideos = [{
-          targetIndex: idx,
-          videoUrl: fallbackVideoUrl,
-          shape: res?.frameShape ?? 0,
-          targetSize: DEFAULT_TARGET_SIZE,
-        }];
-      }
-
-      const idxLabel = targetVideos.map((target) => target.targetIndex).join(',');
-      setDebug((prev) => ({
-        ...prev,
-        api: 'ok',
-        mindFile,
-        lastTargetIndex: idxLabel || '-',
-      }));
-      stopCameraScanTimers();
-      setIsLoadingMagic(true);
-      setStatus(LOADING_MAGIC_TEXT);
-      postArAnalytics({ customerCode: res?.customerCode, customerId: res?.customerId });
-
-      await startMindARWithMindFile(mindFile, targetVideos);
+      await applyMagicLookupResult(res);
     } catch (e) {
       console.error(e);
       setDebug((prev) => ({ ...prev, api: 'err', apiHttp: 'ERR' }));
       setStatus('Searching image...');
       setIsLoadingMagic(false);
+    } finally {
+      apiInFlightRef.current = false;
+    }
+  };
+
+  const startFromCustomerCodeOrCamera = async () => {
+    const customerCode = getCustomerCodeFromUrl();
+    if (!customerCode) {
+      await startCameraOnly();
+      return;
+    }
+
+    if (apiInFlightRef.current) return;
+
+    apiInFlightRef.current = true;
+    setError(null);
+    setUi('running');
+    setHasActiveMindTarget(false);
+    setIsLoadingMagic(true);
+    setStatus(LOADING_MAGIC_TEXT);
+    clearPreviews();
+    stopCameraScanTimers();
+    clearMindarTimers();
+    stopAudioPlayer();
+    removeMindarUiOverlays();
+    setDebug((prev) => ({
+      ...prev,
+      usingMind: false,
+      mindFile: '-',
+      api: 'calling',
+      apiHttp: '-',
+      lastTargetIndex: '-',
+      tick: 0,
+      lastCapture: 'qr',
+      scanElapsed: '0s',
+    }));
+
+    try {
+      clearContainer();
+      const res = await qrMindLookupApi(customerCode);
+      await applyMagicLookupResult(res);
+    } catch (e) {
+      console.error(e);
+      setDebug((prev) => ({ ...prev, api: 'err', apiHttp: 'ERR' }));
+      setIsLoadingMagic(false);
+      setError(e?.message || 'QR lookup failed.');
+      await closeToIdle('QR lookup failed.');
     } finally {
       apiInFlightRef.current = false;
     }
@@ -1914,7 +2014,7 @@ export default function MindARFrameApi({
 
   useEffect(() => {
     const token = ++effectTokenRef.current;
-    if (autoStart) startCameraOnly();
+    if (autoStart) startFromCustomerCodeOrCamera();
 
     return () => {
       setTimeout(() => {
@@ -2602,7 +2702,7 @@ export default function MindARFrameApi({
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
             <button
-              onClick={startCameraOnly}
+              onClick={startFromCustomerCodeOrCamera}
               style={{
                 padding: '12px 18px',
                 borderRadius: 14,

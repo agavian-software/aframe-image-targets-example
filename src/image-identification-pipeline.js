@@ -1,6 +1,7 @@
 const DEFAULT_CAPTURE_INTERVAL_MS = 0
 const DEFAULT_IDENTIFICATION_TIMEOUT_MS = 30000
 const DEFAULT_API_URL = 'https://backend.agavian.in/ecommerce/magic/v1/image/match'
+const DEFAULT_QR_API_PATH = '/ecommerce/magic/v1/image/qr'
 const DEFAULT_PROCESSING_WIDTH = 480
 const DEFAULT_JPEG_QUALITY = 0.85
 
@@ -9,6 +10,28 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 const getMetaContent = (name) => {
   const element = document.querySelector(`meta[name="${name}"]`)
   return element ? element.content.trim() : ''
+}
+
+const getCustomerCodeFromUrl = () => {
+  const query = new URLSearchParams(window.location.search)
+  return (query.get('code') || query.get('customerCode') || query.get('customer_code') || '').trim()
+}
+
+const getQrApiUrl = (config, customerCode) => {
+  const configuredUrl = config.qrApiUrl || ''
+  const encodedCustomerCode = encodeURIComponent(customerCode)
+
+  if (configuredUrl) {
+    const separator = configuredUrl.includes('?') ? '&' : '?'
+    return `${configuredUrl}${separator}customerCode=${encodedCustomerCode}`
+  }
+
+  try {
+    const url = new URL(config.apiUrl || DEFAULT_API_URL, window.location.href)
+    return `${url.origin}${DEFAULT_QR_API_PATH}?customerCode=${encodedCustomerCode}`
+  } catch (_) {
+    return `${DEFAULT_QR_API_PATH}?customerCode=${encodedCustomerCode}`
+  }
 }
 
 const getRuntimeConfig = () => {
@@ -21,6 +44,13 @@ const getRuntimeConfig = () => {
       globalConfig.apiUrl ||
       getMetaContent('image-identification-api') ||
       DEFAULT_API_URL,
+    qrApiUrl:
+      query.get('qrApi') ||
+      globalConfig.qrApiUrl ||
+      getMetaContent('qr-code-api') ||
+      '',
+    customerCode:
+      getCustomerCodeFromUrl(),
     fieldName:
       globalConfig.fieldName ||
       getMetaContent('image-identification-field') ||
@@ -143,6 +173,7 @@ const imageIdentificationPipelineModule = () => {
   let identificationStartedAt = 0
   let requestController = null
   let timedOut = false
+  let qrLookupStarted = false
 
   const stopPendingRequest = () => {
     if (requestController) {
@@ -160,6 +191,8 @@ const imageIdentificationPipelineModule = () => {
   }
 
   const identifyCurrentFrame = () => {
+    if (config.customerCode) return Promise.resolve()
+
     if (matchFound || !config.apiUrl || !cameraCanvas || requestInFlight) {
       if (!config.apiUrl && !warnedAboutMissingApi) {
         warnedAboutMissingApi = true
@@ -226,6 +259,65 @@ const imageIdentificationPipelineModule = () => {
       })
   }
 
+  const identifyByCustomerCode = () => {
+    if (!config.customerCode || qrLookupStarted || requestInFlight || matchFound) {
+      return Promise.resolve()
+    }
+
+    qrLookupStarted = true
+    requestInFlight = true
+    const controller = new AbortController()
+    requestController = controller
+    const qrApiUrl = getQrApiUrl(config, config.customerCode)
+
+    console.log('[image-identification] customerCode found; using QR lookup:', config.customerCode)
+
+    return fetch(qrApiUrl, {
+      method: 'GET',
+      headers: config.headers,
+      signal: controller.signal,
+    })
+      .then((response) =>
+        parseResponse(response).then((body) => ({
+          response,
+          body,
+        }))
+      )
+      .then(({response, body}) => {
+        if (!response.ok) {
+          console.error('[image-identification] QR API error', {
+            status: response.status,
+            response: body,
+          })
+          matchFound = false
+          return
+        }
+
+        console.log('[image-identification] QR response:', body)
+        if (timedOut || !hasMatchedVideo(body)) {
+          matchFound = false
+          return
+        }
+
+        matchFound = true
+        stopPendingRequest()
+        window.dispatchEvent(
+          new CustomEvent('imageidentified', {
+            detail: unwrapMagicResponse(body),
+          })
+        )
+      })
+      .catch((error) => {
+        if (error.name === 'AbortError') return
+        matchFound = false
+        console.error('[image-identification] QR request failed:', error)
+      })
+      .finally(() => {
+        requestInFlight = false
+        if (requestController === controller) requestController = null
+      })
+  }
+
   return {
     name: 'image-identification',
 
@@ -237,6 +329,7 @@ const imageIdentificationPipelineModule = () => {
       console.log('[image-identification] Camera pipeline started.')
       window.addEventListener('imageidentificationpause', pauseIdentification)
       window.addEventListener('imageidentificationresume', resumeIdentification)
+      identifyByCustomerCode()
     },
 
     onUpdate: () => {
@@ -272,6 +365,12 @@ const imageIdentificationPipelineModule = () => {
   }
 
   function resumeIdentification() {
+    if (config.customerCode) {
+      matchFound = true
+      timedOut = false
+      return
+    }
+
     matchFound = false
     timedOut = false
     identificationStartedAt = performance.now()
