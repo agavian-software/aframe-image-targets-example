@@ -248,6 +248,8 @@ const DEFAULT_TARGET_SIZE = { width: 1, height: 1 };
 const TARGET_VIDEO_OVERSCAN = 1.04;
 const DESKTOP_API_CALL_INTERVAL_MS = 3000;
 const MOBILE_API_CALL_INTERVAL_MS = 5000;
+const QR_SCAN_INTERVAL_MS = 600;
+const QR_SCAN_WIDTH = 720;
 const LOADING_MAGIC_TEXT = 'Loading magic...';
 
 function getTargetSizeFromAspect(aspect) {
@@ -306,6 +308,77 @@ export function isMobileLike() {
 
 function getApiCallIntervalMs() {
   return isMobileLike() ? MOBILE_API_CALL_INTERVAL_MS : DESKTOP_API_CALL_INTERVAL_MS;
+}
+
+function parseQrLinkParams(rawValue) {
+  const link = typeof rawValue === 'string' ? rawValue.trim() : '';
+  if (!link) return null;
+
+  try {
+    const url = new URL(link, window.location.href);
+    const query = url.searchParams;
+    const code = normalizeAnalyticsCustomerCode(query.get('code'));
+
+    return {
+      link: url.href,
+      code,
+      customerCode: code,
+      params: Object.fromEntries(query.entries()),
+    };
+  } catch (_) {
+    return {
+      link,
+      code: '',
+      customerCode: '',
+      params: {},
+    };
+  }
+}
+
+async function createQrDetector() {
+  if (typeof window === 'undefined' || typeof window.BarcodeDetector !== 'function') return null;
+
+  try {
+    if (typeof window.BarcodeDetector.getSupportedFormats === 'function') {
+      const formats = await window.BarcodeDetector.getSupportedFormats();
+      if (Array.isArray(formats) && !formats.includes('qr_code')) return null;
+    }
+  } catch (_) {}
+
+  try {
+    return new window.BarcodeDetector({ formats: ['qr_code'] });
+  } catch (_) {
+    return null;
+  }
+}
+
+async function detectQrFromVideoFrame({ detector, videoEl, canvasEl }) {
+  if (!detector || !videoEl) return null;
+  if (videoEl.readyState < 2 || !videoEl.videoWidth || !videoEl.videoHeight) return null;
+
+  try {
+    const directResults = await detector.detect(videoEl);
+    const directValue = directResults?.find((item) => item?.rawValue)?.rawValue;
+    if (directValue) return directValue;
+  } catch (_) {}
+
+  if (!canvasEl) return null;
+
+  const width = Math.max(2, Math.min(QR_SCAN_WIDTH, videoEl.videoWidth));
+  const height = Math.max(2, Math.floor((videoEl.videoHeight / videoEl.videoWidth) * width));
+  canvasEl.width = width;
+  canvasEl.height = height;
+
+  const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+
+  try {
+    ctx.drawImage(videoEl, 0, 0, width, height);
+    const results = await detector.detect(canvasEl);
+    return results?.find((item) => item?.rawValue)?.rawValue || null;
+  } catch (_) {
+    return null;
+  }
 }
 
 function normalizeCropMargins({ cropMargin = 0, cropMargins = null }) {
@@ -478,7 +551,18 @@ export default function MindARFrameApi({
   const cameraStopTimeoutRef = useRef(null);
   const cameraStartedAtRef = useRef(0);
   const processingCanvasRef = useRef(null);
+  const qrProcessingCanvasRef = useRef(null);
   const scanVideoRef = useRef(null);
+  const qrScanVideoRef = useRef(null);
+  const qrScanTimeoutRef = useRef(null);
+  const qrDetectorRef = useRef(null);
+  const qrDetectorReadyRef = useRef(false);
+  const qrDetectingRef = useRef(false);
+  const qrFlowStartedRef = useRef(false);
+  const qrScanningEnabledRef = useRef(false);
+  const qrScanGenerationRef = useRef(0);
+  const lastQrLinkRef = useRef('');
+  const lastQrParamsRef = useRef({});
   const audioPlayerRef = useRef(null);
   const uiStateRef = useRef('idle');
   const effectTokenRef = useRef(0);
@@ -524,6 +608,7 @@ export default function MindARFrameApi({
     api: 'idle',
     apiHttp: '-',
     lastTargetIndex: '-',
+    qr: 'idle',
     scanElapsed: '0s',
   });
 
@@ -597,6 +682,18 @@ export default function MindARFrameApi({
       cameraStopTimeoutRef.current = null;
     }
   };
+
+  const stopQrScanLoop = () => {
+    qrScanGenerationRef.current += 1;
+    if (qrScanTimeoutRef.current) {
+      clearTimeout(qrScanTimeoutRef.current);
+      qrScanTimeoutRef.current = null;
+    }
+    qrScanVideoRef.current = null;
+    qrDetectingRef.current = false;
+  };
+
+  const shouldUseCameraQrScan = () => !getCustomerCodeFromUrl();
 
   const stopScannerVideo = async () => {
     if (scanVideoRef.current) {
@@ -764,12 +861,15 @@ export default function MindARFrameApi({
 
     try {
       stopCameraScanTimers();
+      stopQrScanLoop();
       clearMindarTimers();
       stopAudioPlayer();
       await stopScannerVideo();
       await teardownMindAROnly();
 
       apiInFlightRef.current = false;
+      qrFlowStartedRef.current = false;
+      qrScanningEnabledRef.current = false;
       anyMindTargetFoundRef.current = false;
       setIsLoadingMagic(false);
       clearPreviews();
@@ -782,6 +882,7 @@ export default function MindARFrameApi({
         api: 'idle',
         apiHttp: '-',
         lastTargetIndex: '-',
+        qr: 'idle',
         tick: 0,
         lastCapture: '-',
         scanElapsed: '0s',
@@ -801,9 +902,12 @@ export default function MindARFrameApi({
       setStatus(reason);
       setUi('switching');
       stopCameraScanTimers();
+      stopQrScanLoop();
       stopAudioPlayer();
       await teardownMindAROnly();
       apiInFlightRef.current = false;
+      qrFlowStartedRef.current = false;
+      qrScanningEnabledRef.current = false;
       anyMindTargetFoundRef.current = false;
       setIsLoadingMagic(false);
       setError(null);
@@ -1421,7 +1525,9 @@ export default function MindARFrameApi({
     }, 0);
   };
 
-  const applyMagicLookupResult = async (res) => {
+  const applyMagicLookupResult = async (res, { allowDuringQrFlow = false } = {}) => {
+    if (qrFlowStartedRef.current && !allowDuringQrFlow) return;
+
     const httpStatus = res?.httpStatus ?? (res?.ok ? 200 : 500);
     setDebug((prev) => ({ ...prev, apiHttp: String(httpStatus) }));
 
@@ -1485,8 +1591,122 @@ export default function MindARFrameApi({
     await startMindARWithMindFile(mindFile, targetVideos);
   };
 
+  const handleDetectedQrValue = async (rawQrValue) => {
+    if (qrFlowStartedRef.current) return;
+
+    const parsed = parseQrLinkParams(rawQrValue);
+    if (!parsed) return;
+
+    qrFlowStartedRef.current = true;
+    qrScanningEnabledRef.current = false;
+    lastQrLinkRef.current = parsed.link;
+    lastQrParamsRef.current = parsed.params;
+    stopQrScanLoop();
+    stopCameraScanTimers();
+    clearMindarTimers();
+    apiInFlightRef.current = false;
+
+    try {
+      window.dispatchEvent(new CustomEvent('qrdetected', { detail: parsed }));
+    } catch (_) {}
+
+    setDebug((prev) => ({
+      ...prev,
+      qr: parsed.customerCode ? 'found' : 'found-no-code',
+      lastCapture: 'qr',
+      api: parsed.customerCode ? 'calling' : prev.api,
+      apiHttp: '-',
+    }));
+
+    if (!parsed.customerCode) {
+      setError('QR found, but no code parameter was present in the link.');
+      await closeToIdle('QR found without customer code.');
+      return;
+    }
+
+    try {
+      setError(null);
+      setIsLoadingMagic(true);
+      setStatus(LOADING_MAGIC_TEXT);
+      await stopScannerVideo();
+      await teardownMindAROnly();
+      clearPreviews();
+      clearContainer();
+      setUi('running');
+
+      const res = await qrMindLookupApi(parsed.customerCode);
+      await applyMagicLookupResult(res, { allowDuringQrFlow: true });
+    } catch (e) {
+      console.error(e);
+      qrFlowStartedRef.current = false;
+      setDebug((prev) => ({ ...prev, qr: 'err', api: 'err', apiHttp: 'ERR' }));
+      setIsLoadingMagic(false);
+      setError(e?.message || 'QR lookup failed.');
+      await closeToIdle('QR lookup failed.');
+    } finally {
+      apiInFlightRef.current = false;
+    }
+  };
+
+  const scheduleQrScanForVideo = async (videoEl) => {
+    if (!videoEl || !shouldUseCameraQrScan() || qrFlowStartedRef.current) return;
+    qrScanningEnabledRef.current = true;
+    qrScanVideoRef.current = videoEl;
+
+    if (!qrDetectorReadyRef.current) {
+      qrDetectorReadyRef.current = true;
+      qrDetectorRef.current = await createQrDetector();
+      setDebug((prev) => ({ ...prev, qr: qrDetectorRef.current ? 'scanning' : 'unsupported' }));
+    } else if (qrDetectorRef.current) {
+      setDebug((prev) => ({ ...prev, qr: 'scanning' }));
+    }
+
+    const generation = ++qrScanGenerationRef.current;
+
+    const tick = async () => {
+      qrScanTimeoutRef.current = null;
+      if (generation !== qrScanGenerationRef.current) return;
+      if (!qrScanningEnabledRef.current || qrFlowStartedRef.current) return;
+      if (!qrDetectorRef.current) return;
+
+      const currentVideo = qrScanVideoRef.current;
+      if (!currentVideo || currentVideo.readyState < 2) {
+        qrScanTimeoutRef.current = setTimeout(tick, QR_SCAN_INTERVAL_MS);
+        return;
+      }
+
+      if (!qrDetectingRef.current) {
+        qrDetectingRef.current = true;
+        try {
+          if (!qrProcessingCanvasRef.current) {
+            qrProcessingCanvasRef.current = document.createElement('canvas');
+          }
+
+          const rawValue = await detectQrFromVideoFrame({
+            detector: qrDetectorRef.current,
+            videoEl: currentVideo,
+            canvasEl: qrProcessingCanvasRef.current,
+          });
+
+          if (rawValue) {
+            await handleDetectedQrValue(rawValue);
+            return;
+          }
+        } finally {
+          qrDetectingRef.current = false;
+        }
+      }
+
+      if (generation === qrScanGenerationRef.current && qrScanningEnabledRef.current) {
+        qrScanTimeoutRef.current = setTimeout(tick, QR_SCAN_INTERVAL_MS);
+      }
+    };
+
+    qrScanTimeoutRef.current = setTimeout(tick, 0);
+  };
+
   const tryApiForMindFile = async ({ frameFile }) => {
-    if (uiStateRef.current !== 'running' || apiInFlightRef.current) return;
+    if (uiStateRef.current !== 'running' || apiInFlightRef.current || qrFlowStartedRef.current) return;
 
     apiInFlightRef.current = true;
     setDebug((prev) => ({ ...prev, api: 'calling', apiHttp: '-' }));
@@ -1494,6 +1714,7 @@ export default function MindARFrameApi({
     try {
       setStatus('Calling API...');
       const res = await dummyMindLookupApi({ frameFile });
+      if (qrFlowStartedRef.current) return;
       await applyMagicLookupResult(res);
     } catch (e) {
       console.error(e);
@@ -1514,6 +1735,9 @@ export default function MindARFrameApi({
 
     if (apiInFlightRef.current) return;
 
+    stopQrScanLoop();
+    qrFlowStartedRef.current = false;
+    qrScanningEnabledRef.current = false;
     apiInFlightRef.current = true;
     setError(null);
     setUi('running');
@@ -1532,6 +1756,7 @@ export default function MindARFrameApi({
       api: 'calling',
       apiHttp: '-',
       lastTargetIndex: '-',
+      qr: 'url-code',
       tick: 0,
       lastCapture: 'qr',
       scanElapsed: '0s',
@@ -1778,6 +2003,7 @@ export default function MindARFrameApi({
     if (!mindFile) throw new Error('mindFile URL missing');
 
     stopCameraScanTimers();
+    stopQrScanLoop();
     await stopScannerVideo();
 
     if (mindarRef.current) await teardownMindAROnly();
@@ -1854,6 +2080,7 @@ export default function MindARFrameApi({
         mindVideoEl.style.display = 'block';
         mindVideoEl.style.pointerEvents = 'none';
         mindVideoEl.style.touchAction = 'none';
+        scheduleQrScanForVideo(mindVideoEl);
       }
 
       clearTimeout(mindarNoTargetTimerRef.current);
@@ -1901,7 +2128,7 @@ export default function MindARFrameApi({
       try {
         if (uiStateRef.current !== 'running') return;
         if (!scanVideoRef.current || !processingCanvasRef.current) return;
-        if (apiInFlightRef.current) return;
+        if (apiInFlightRef.current || qrFlowStartedRef.current) return;
 
         const frameFile = await captureVideoFrameToJpegFile({
           videoEl: scanVideoRef.current,
@@ -1948,11 +2175,14 @@ export default function MindARFrameApi({
       api: 'idle',
       apiHttp: '-',
       lastTargetIndex: '-',
+      qr: shouldUseCameraQrScan() ? 'idle' : 'url-code',
       tick: 0,
       lastCapture: '-',
       scanElapsed: '0s',
     }));
     apiInFlightRef.current = false;
+    qrFlowStartedRef.current = false;
+    qrScanningEnabledRef.current = shouldUseCameraQrScan();
 
     try {
       clearContainer();
@@ -1992,6 +2222,7 @@ export default function MindARFrameApi({
       cameraStopTimeoutRef.current = setTimeout(() => {
         if (uiStateRef.current === 'running') closeToIdle('Auto-stopped (1 minute).');
       }, Math.max(1000, cameraMaxScanMs));
+      scheduleQrScanForVideo(video);
       scheduleNextCameraCapture();
     } catch (e) {
       setError(e?.message || 'Failed to start camera.');

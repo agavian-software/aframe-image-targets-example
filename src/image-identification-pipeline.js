@@ -4,6 +4,7 @@ const DEFAULT_API_URL = 'https://backend.agavian.in/ecommerce/magic/v1/image/mat
 const DEFAULT_QR_API_PATH = '/ecommerce/magic/v1/image/qr'
 const DEFAULT_PROCESSING_WIDTH = 480
 const DEFAULT_JPEG_QUALITY = 0.85
+const QR_SCAN_INTERVAL_MS = 600
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
@@ -15,6 +16,31 @@ const getMetaContent = (name) => {
 const getCustomerCodeFromUrl = () => {
   const query = new URLSearchParams(window.location.search)
   return (query.get('code') || query.get('customerCode') || query.get('customer_code') || '').trim()
+}
+
+const parseQrLinkParams = (rawValue) => {
+  const link = typeof rawValue === 'string' ? rawValue.trim() : ''
+  if (!link) return null
+
+  try {
+    const url = new URL(link, window.location.href)
+    const params = Object.fromEntries(url.searchParams.entries())
+    const code = (url.searchParams.get('code') || '').trim()
+
+    return {
+      link: url.href,
+      code,
+      customerCode: code,
+      params,
+    }
+  } catch (_) {
+    return {
+      link,
+      code: '',
+      customerCode: '',
+      params: {},
+    }
+  }
 }
 
 const getQrApiUrl = (config, customerCode) => {
@@ -167,9 +193,15 @@ const imageIdentificationPipelineModule = () => {
   let cameraCanvas = null
   let scanRegion = null
   let requestInFlight = false
+  let qrRequestInFlight = false
+  let qrDetecting = false
+  let qrDetector = null
+  let qrDetectorReady = false
+  let lastQrScanAt = 0
   let lastCaptureAt = 0
   let warnedAboutMissingApi = false
   let matchFound = false
+  let imageRecognitionPaused = false
   let identificationStartedAt = 0
   let requestController = null
   let timedOut = false
@@ -180,6 +212,38 @@ const imageIdentificationPipelineModule = () => {
       requestController.abort()
       requestController = null
     }
+  }
+
+  const ensureQrDetector = () => {
+    if (qrDetectorReady) return Promise.resolve(qrDetector)
+    qrDetectorReady = true
+
+    if (typeof window.BarcodeDetector !== 'function') {
+      console.warn('[image-identification] QR scanning is not supported by this browser.')
+      return Promise.resolve(null)
+    }
+
+    return Promise.resolve()
+      .then(() => {
+        if (typeof window.BarcodeDetector.getSupportedFormats !== 'function') return true
+        return window.BarcodeDetector.getSupportedFormats()
+          .then(formats => !Array.isArray(formats) || formats.includes('qr_code'))
+          .catch(() => true)
+      })
+      .then((isSupported) => {
+        if (!isSupported) {
+          console.warn('[image-identification] QR code format is not supported by this browser.')
+          return null
+        }
+
+        qrDetector = new window.BarcodeDetector({formats: ['qr_code']})
+        return qrDetector
+      })
+      .catch((error) => {
+        console.warn('[image-identification] Could not start QR scanner:', error)
+        qrDetector = null
+        return null
+      })
   }
 
   const timeOutIdentification = () => {
@@ -193,7 +257,7 @@ const imageIdentificationPipelineModule = () => {
   const identifyCurrentFrame = () => {
     if (config.customerCode) return Promise.resolve()
 
-    if (matchFound || !config.apiUrl || !cameraCanvas || requestInFlight) {
+    if (imageRecognitionPaused || matchFound || !config.apiUrl || !cameraCanvas || requestInFlight) {
       if (!config.apiUrl && !warnedAboutMissingApi) {
         warnedAboutMissingApi = true
         console.warn(
@@ -259,8 +323,8 @@ const imageIdentificationPipelineModule = () => {
       })
   }
 
-  const identifyByCustomerCode = () => {
-    if (!config.customerCode || qrLookupStarted || requestInFlight || matchFound) {
+  const identifyByCustomerCode = (customerCode = config.customerCode) => {
+    if (!customerCode || qrLookupStarted || requestInFlight || matchFound) {
       return Promise.resolve()
     }
 
@@ -268,9 +332,9 @@ const imageIdentificationPipelineModule = () => {
     requestInFlight = true
     const controller = new AbortController()
     requestController = controller
-    const qrApiUrl = getQrApiUrl(config, config.customerCode)
+    const qrApiUrl = getQrApiUrl(config, customerCode)
 
-    console.log('[image-identification] customerCode found; using QR lookup:', config.customerCode)
+    console.log('[image-identification] customerCode found; using QR lookup:', customerCode)
 
     return fetch(qrApiUrl, {
       method: 'GET',
@@ -318,6 +382,45 @@ const imageIdentificationPipelineModule = () => {
       })
   }
 
+  const identifyCurrentQr = () => {
+    if (config.customerCode || qrLookupStarted || qrRequestInFlight || qrDetecting || !cameraCanvas) {
+      return Promise.resolve()
+    }
+
+    qrDetecting = true
+
+    return ensureQrDetector()
+      .then((detector) => {
+        if (!detector || qrLookupStarted || qrRequestInFlight) return null
+        return detector.detect(cameraCanvas)
+      })
+      .then((results) => {
+        const rawValue = results?.find(item => item?.rawValue)?.rawValue
+        if (!rawValue || qrLookupStarted) return
+
+        const parsed = parseQrLinkParams(rawValue)
+        if (!parsed?.code) {
+          console.warn('[image-identification] QR found without code param:', parsed)
+          window.dispatchEvent(new CustomEvent('qrdetected', {detail: parsed}))
+          return
+        }
+
+        console.log('[image-identification] QR found; parsed code:', parsed.code)
+        window.dispatchEvent(new CustomEvent('qrdetected', {detail: parsed}))
+
+        qrRequestInFlight = true
+        imageRecognitionPaused = true
+        stopPendingRequest()
+        requestInFlight = false
+
+        return identifyByCustomerCode(parsed.code)
+      })
+      .finally(() => {
+        qrDetecting = false
+        qrRequestInFlight = false
+      })
+  }
+
   return {
     name: 'image-identification',
 
@@ -325,6 +428,7 @@ const imageIdentificationPipelineModule = () => {
       cameraCanvas = canvas
       scanRegion = document.querySelector('#scanRegion')
       lastCaptureAt = performance.now()
+      lastQrScanAt = lastCaptureAt - QR_SCAN_INTERVAL_MS
       identificationStartedAt = lastCaptureAt
       console.log('[image-identification] Camera pipeline started.')
       window.addEventListener('imageidentificationpause', pauseIdentification)
@@ -340,7 +444,17 @@ const imageIdentificationPipelineModule = () => {
         return
       }
 
-      if (matchFound || requestInFlight || now - lastCaptureAt < config.captureIntervalMs) {
+      if (!config.customerCode && !qrLookupStarted && now - lastQrScanAt >= QR_SCAN_INTERVAL_MS) {
+        lastQrScanAt = now
+        identifyCurrentQr()
+      }
+
+      if (
+        imageRecognitionPaused ||
+        matchFound ||
+        requestInFlight ||
+        now - lastCaptureAt < config.captureIntervalMs
+      ) {
         return
       }
 
@@ -354,28 +468,34 @@ const imageIdentificationPipelineModule = () => {
       cameraCanvas = null
       scanRegion = null
       requestInFlight = false
+      qrRequestInFlight = false
+      qrDetecting = false
       matchFound = false
+      imageRecognitionPaused = false
       stopPendingRequest()
     },
   }
 
   function pauseIdentification() {
-    matchFound = true
+    imageRecognitionPaused = true
     stopPendingRequest()
   }
 
   function resumeIdentification() {
     if (config.customerCode) {
       matchFound = true
+      imageRecognitionPaused = true
       timedOut = false
       return
     }
 
     matchFound = false
+    imageRecognitionPaused = false
     timedOut = false
     identificationStartedAt = performance.now()
     // The caller owns the delay, so capture on the next pipeline update.
     lastCaptureAt = performance.now() - config.captureIntervalMs
+    lastQrScanAt = performance.now() - QR_SCAN_INTERVAL_MS
   }
 }
 
