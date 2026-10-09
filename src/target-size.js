@@ -1,5 +1,11 @@
 const {getVideoSurfaceSize} = require('./video-mask')
 
+const getShapeVideoScale = (value) => {
+  const scale = Number(value)
+  // Cover the narrow printed rim and small tracking inaccuracies by default.
+  return Number.isFinite(scale) && scale > 0 ? scale : 1.1
+}
+
 const getTrackedTargetSize = (geometry = {}) => {
   const {scaledWidth: width, scaledHeight: height} = geometry || {}
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
@@ -42,4 +48,4 @@ const getTargetVideoLayout = (config, trackedSize, properties = {}, shapeScale =
   })
 }
 
-module.exports = {getTrackedTargetSize, getTargetVideoSize, getTargetVideoLayout}
+module.exports = {getShapeVideoScale, getTrackedTargetSize, getTargetVideoSize, getTargetVideoLayout}

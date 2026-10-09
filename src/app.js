@@ -1,7 +1,7 @@
 require('./index.css')
 
 const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask} = require('./video-mask')
-const {getTrackedTargetSize, getTargetVideoLayout} = require('./target-size')
+const {getShapeVideoScale, getTrackedTargetSize, getTargetVideoLayout} = require('./target-size')
 
 const {
   imageIdentificationPipelineModule,
@@ -27,7 +27,7 @@ const getMagicEntries = (response) => {
 const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
 
 const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
-const SHAPE_VIDEO_SCALE = Number(new URLSearchParams(window.location.search).get('shapeScale')) || 1
+const SHAPE_VIDEO_SCALE = getShapeVideoScale(new URLSearchParams(window.location.search).get('shapeScale'))
 const TARGET_LOST_GRACE_MS = 2500
 const SCAN_STATUS_SEARCHING = 'Searching image...'
 const SCAN_STATUS_LOADING_MAGIC = 'Loading magic...'
@@ -552,8 +552,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!target) throw new Error('Image target container is missing.')
 
-    let plane = target.querySelector('.magic-video-plane') ||
-      target.querySelector('[xrextras-target-video-fade]')
+    // The legacy fade component registers parent listeners without cleaning
+    // them up on removal. Reusing its entity lets tracking replace our masked
+    // mesh with a rectangular one. Always use a separate, clean entity.
+    target.querySelectorAll('[xrextras-target-video-fade]').forEach(legacy => legacy.remove())
+    let plane = target.querySelector('.magic-video-plane')
 
     if (!plane) {
       plane = document.createElement('a-entity')

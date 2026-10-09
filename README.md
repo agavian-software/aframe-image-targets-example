@@ -74,8 +74,10 @@ Each `videoUrlV1` entry can select a built-in shape or an uploaded image mask:
   map that surface from the tracking region to the original image, so a circle can
   cover the whole disc even when only a smaller rectangle is used for tracking.
   Square videos retain their full frame; other video ratios are cropped to cover.
-  To calibrate a physical frame, add `?shapeScale=1.3` to the AR page URL for a
-  30% larger shape diameter. The default is `1`; rectangular playback is unaffected.
+  Shape playback defaults to `shapeScale=1.1`, adding 10% to the diameter to cover
+  a narrow printed rim. To calibrate a physical frame, add `?shapeScale=1.12` to
+  the AR page URL for 12% enlargement relative to the target, or `shapeScale=1`
+  for its exact calculated size. Rectangular playback is unaffected.
 - Upload masks through your existing upload service and return their URL in the API
   response. The mask host must allow cross-origin image access (CORS). An ordinary
   photo with an opaque background needs a prepared mask to define its outline.
