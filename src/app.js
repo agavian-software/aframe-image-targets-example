@@ -1,6 +1,7 @@
 require('./index.css')
 
 const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask} = require('./video-mask')
+const {getTrackedTargetSize, getTargetVideoSize} = require('./target-size')
 
 const {
   imageIdentificationPipelineModule,
@@ -26,7 +27,6 @@ const getMagicEntries = (response) => {
 const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
 
 const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
-const TARGET_VIDEO_OVERSCAN = 1.04
 const TARGET_LOST_GRACE_MS = 2500
 const SCAN_STATUS_SEARCHING = 'Searching image...'
 const SCAN_STATUS_LOADING_MAGIC = 'Loading magic...'
@@ -41,8 +41,8 @@ const getTargetSize = imageUrl => new Promise((resolve) => {
       return
     }
 
-    // Image-target coordinates use target height as one unit.
-    resolve({width: aspect, height: 1})
+    // Approximate local dimensions until XR8 reports the target geometry.
+    resolve({width: Math.min(aspect, 1), height: Math.min(1 / aspect, 1)})
   }
   image.onerror = () => resolve(DEFAULT_TARGET_SIZE)
   image.src = imageUrl
@@ -248,7 +248,9 @@ const loadImageTarget = (entry) => {
       })
 
       const maskConfig = getVideoMaskConfig(entry, value => joinUrl(MAGIC_CDN_BASE, value))
-      return getTargetSize(targetData.imagePath).then((targetSize) => {
+      // Recognition luminance images may be resized to 480x640. Use the
+      // actual tracking crop for the initial aspect, not that raster size.
+      return getTargetSize(targetData.resources.croppedImage).then((targetSize) => {
         // Validate/download masks before activating a matched experience.
         return prepareVideoMask(maskConfig).then(() => ({
           targetData,
@@ -372,6 +374,29 @@ document.addEventListener('DOMContentLoaded', () => {
       }, maskConfig))
     })
   }
+
+  const updateTargetGeometry = (targetName, geometry) => {
+    const experience = targetExperiences.get(targetName)
+    const targetSize = getTrackedTargetSize(geometry)
+    if (!experience || !targetSize) return
+    const {width, height} = getTargetVideoSize(experience.maskConfig, targetSize)
+    if (experience.width === width && experience.height === height) return
+
+    experience.width = width
+    experience.height = height
+    experience.plane.setAttribute('magic-target-video-cover', Object.assign({
+      video: '#magic-video', width, height,
+    }, experience.maskConfig))
+    experience.loadingPanel.object3D.scale.set(
+      width / experience.loadingSize.width, height / experience.loadingSize.height, 1)
+  }
+
+  scene.addEventListener('xrimagescanning', (event) => {
+    event.detail?.imageTargets?.forEach(({name, geometry}) => updateTargetGeometry(name, geometry))
+  })
+  scene.addEventListener('xrimageupdated', (event) => {
+    updateTargetGeometry(event.detail?.name, event.detail)
+  })
 
   const revealPlayingTarget = () => {
     if (!playingTargetName) return
@@ -531,8 +556,7 @@ document.addEventListener('DOMContentLoaded', () => {
     target.querySelectorAll('.magic-target-loader').forEach(loader => loader.remove())
 
     const targetSize = getSafeTargetSize(match.targetSize)
-    const {width, height} = getVideoSurfaceSize(match.maskConfig,
-      targetSize.width * TARGET_VIDEO_OVERSCAN, targetSize.height * TARGET_VIDEO_OVERSCAN)
+    const {width, height} = getTargetVideoSize(match.maskConfig, targetSize)
     plane.setAttribute('magic-target-video-cover', Object.assign({
       video: '#magic-video',
       width,
@@ -601,6 +625,7 @@ document.addEventListener('DOMContentLoaded', () => {
       width,
       height,
       loadingPanel,
+      loadingSize: {width, height},
       loadingText,
       videoUrl: match.videoUrl,
       maskConfig: match.maskConfig,
@@ -644,6 +669,8 @@ document.addEventListener('DOMContentLoaded', () => {
   scene.addEventListener('xrimagefound', (event) => {
     const experience = targetExperiences.get(event.detail?.name)
     if (!experience) return
+
+    updateTargetGeometry(event.detail.name, event.detail)
 
     cancelTargetLostTimer()
     cancelIdentificationRestart()
