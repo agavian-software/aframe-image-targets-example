@@ -41,6 +41,46 @@ Successful API results are logged as `[image-identification] Identified image re
 also emitted as an `imageidentified` event on `window`. The event is the extension point for
 loading the returned target JSON and video in the next phase.
 
+### Video Shape Masks
+
+Each `videoUrlV1` entry can select a built-in shape or an uploaded image mask:
+
+```json
+{
+  "videoUrlV1": [
+    {
+      "targetName": "gift",
+      "path": "targets/gift",
+      "videoUrl": "videos/gift.mp4",
+      "maskUrl": "https://example.com/uploads/heart.png",
+      "maskMode": "auto"
+    }
+  ]
+}
+```
+
+- Set `shape: "circle"` or `shape: "heart"` for a built-in shape. Numeric `shape: 1`
+  also selects a circle, matching the MindAR reference. Response-level `frameShape`
+  supplies the default when an entry has no `shape`.
+- Set `maskUrl` to a custom mask image URL. `customShapeUrl` and
+  `shape: {"customShapeUrl": "..."}` are also supported. A custom URL takes priority
+  over a built-in shape; relative URLs resolve against the configured video CDN.
+- A transparent PNG/WebP uses its transparency as the outline. For an opaque mask,
+  use a white shape on a black background: white shows video, black hides video,
+  and gray makes it partially transparent. `maskMode: "auto"` detects transparency;
+  `"alpha"` or `"luminance"` explicitly selects the mask format.
+- Design custom masks with the same aspect ratio as the tracked image, since the
+  mask fills that image's rectangle. Built-in hearts and circles retain their shape
+  and are centered inside the tracked image. The video is cropped to fill the target
+  independently of the mask.
+- Upload masks through your existing upload service and return their URL in the API
+  response. The mask host must allow cross-origin image access (CORS). An ordinary
+  photo with an opaque background needs a prepared mask to define its outline.
+
+Masks are loaded before the experience activates. If a mask cannot be loaded, the
+app resumes identification and logs the error instead of showing an unmasked video.
+Entries with no mask or shape keep rectangular playback.
+
 ### Preparing Target Images
 
 Image targets can be generated using the interactive CLI tool: 

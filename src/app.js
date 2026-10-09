@@ -1,5 +1,7 @@
 require('./index.css')
 
+const {getVideoMaskConfig, prepareVideoMask} = require('./video-mask')
+
 const {
   imageIdentificationPipelineModule,
 } = require('./image-identification-pipeline')
@@ -18,6 +20,7 @@ const getMagicEntries = (response) => {
   const value = response?.videoUrlV1
   return (Array.isArray(value) ? value : value ? [value] : [])
     .filter(item => item && Object(item) === item && item.targetName && item.videoUrl)
+    .map(item => Object.assign({}, item, {shape: item.shape ?? item.frameShape ?? response.frameShape}))
 }
 
 const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
@@ -94,21 +97,27 @@ const registerMagicTargetVideoCover = () => {
       video: {type: 'selector'},
       width: {type: 'number', default: 1},
       height: {type: 'number', default: 1},
+      maskUrl: {type: 'string', default: ''},
+      maskMode: {type: 'string', default: 'auto'},
+      shape: {type: 'string', default: ''},
     },
 
     init() {
       this.videoTexture = null
       this.material = null
       this.mesh = null
+      this.maskTexture = null
+      this.maskRequest = 0
       this.onMetadata = this.updateTextureCover.bind(this)
     },
 
-    update() {
+    update(oldData = {}) {
       const THREE = window.AFRAME.THREE
       const video = this.data.video
       if (!THREE || !video) return
 
       if (!this.videoTexture || this.videoTexture.image !== video) {
+        oldData.video?.removeEventListener('loadedmetadata', this.onMetadata)
         this.videoTexture?.dispose?.()
         this.videoTexture = new THREE.VideoTexture(video)
         this.videoTexture.minFilter = THREE.LinearFilter
@@ -127,6 +136,7 @@ const registerMagicTargetVideoCover = () => {
           map: this.videoTexture,
           side: THREE.DoubleSide,
           transparent: true,
+          alphaTest: 0.01,
         })
       } else {
         this.material.map = this.videoTexture
@@ -145,6 +155,36 @@ const registerMagicTargetVideoCover = () => {
       video.removeEventListener('loadedmetadata', this.onMetadata)
       video.addEventListener('loadedmetadata', this.onMetadata)
       this.updateTextureCover()
+      if (['maskUrl', 'maskMode', 'shape', 'width', 'height'].some(key => oldData[key] !== this.data[key])) {
+        this.updateMask()
+      }
+    },
+
+    updateMask() {
+      const THREE = window.AFRAME.THREE
+      const request = ++this.maskRequest
+      this.maskTexture?.dispose?.()
+      this.maskTexture = null
+      this.material.alphaMap = null
+      const hasMask = this.data.maskUrl || this.data.shape
+      this.material.opacity = hasMask ? 0 : 1
+      this.material.needsUpdate = true
+      if (!hasMask) return
+
+      prepareVideoMask(this.data, this.data.width / this.data.height).then((canvas) => {
+        if (request !== this.maskRequest) return
+        this.maskTexture = new THREE.CanvasTexture(canvas)
+        this.maskTexture.minFilter = THREE.LinearFilter
+        this.maskTexture.magFilter = THREE.LinearFilter
+        this.maskTexture.generateMipmaps = false
+        this.material.alphaMap = this.maskTexture
+        this.material.opacity = 1
+        this.material.needsUpdate = true
+      }).catch((error) => {
+        if (request !== this.maskRequest) return
+        console.error('[magic] Could not load video mask:', error)
+        this.el.emit('magicvideomaskerror', {error})
+      })
     },
 
     updateTextureCover() {
@@ -160,11 +200,13 @@ const registerMagicTargetVideoCover = () => {
     },
 
     remove() {
+      this.maskRequest += 1
       this.data.video?.removeEventListener('loadedmetadata', this.onMetadata)
       this.el.removeObject3D('mesh')
       this.mesh?.geometry?.dispose?.()
       this.material?.dispose?.()
       this.videoTexture?.dispose?.()
+      this.maskTexture?.dispose?.()
     },
   })
 }
@@ -203,12 +245,17 @@ const loadImageTarget = (entry) => {
         luminanceImage: joinUrl(assetRoot, `${targetName}_luminance.jpg`),
       })
 
-      return getTargetSize(targetData.imagePath).then(targetSize => ({
-        targetData,
-        targetName,
-        targetSize,
-        videoUrl: joinUrl(MAGIC_CDN_BASE, entry.videoUrl),
-      }))
+      const maskConfig = getVideoMaskConfig(entry, value => joinUrl(MAGIC_CDN_BASE, value))
+      return getTargetSize(targetData.imagePath).then((targetSize) => {
+        // Validate/download masks before activating a matched experience.
+        return prepareVideoMask(maskConfig, targetSize.width / targetSize.height).then(() => ({
+          targetData,
+          targetName,
+          targetSize,
+          maskConfig,
+          videoUrl: joinUrl(MAGIC_CDN_BASE, entry.videoUrl),
+        }))
+      })
     })
 }
 
@@ -315,12 +362,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const applyVideoCoverToPlanes = () => {
-    targetExperiences.forEach(({plane, width, height}) => {
-      plane?.setAttribute('magic-target-video-cover', {
+    targetExperiences.forEach(({plane, width, height, maskConfig}) => {
+      plane?.setAttribute('magic-target-video-cover', Object.assign({
         video: '#magic-video',
         width,
         height,
-      })
+      }, maskConfig))
     })
   }
 
@@ -409,6 +456,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   bindVideoEvents(video)
 
+  scene.addEventListener('magicvideomaskerror', () => {
+    showVideoLoader('Video shape could not be loaded', true)
+  })
+
   soundToggle?.addEventListener('click', () => {
     video.muted = !video.muted
     updateSoundButton()
@@ -480,11 +531,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const targetSize = getSafeTargetSize(match.targetSize)
     const width = targetSize.width * TARGET_VIDEO_OVERSCAN
     const height = targetSize.height * TARGET_VIDEO_OVERSCAN
-    plane.setAttribute('magic-target-video-cover', {
+    plane.setAttribute('magic-target-video-cover', Object.assign({
       video: '#magic-video',
       width,
       height,
-    })
+    }, match.maskConfig))
     plane.setAttribute('visible', false)
 
     const loadingPanel = document.createElement('a-entity')
@@ -550,6 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
       loadingPanel,
       loadingText,
       videoUrl: match.videoUrl,
+      maskConfig: match.maskConfig,
     })
   }
 
