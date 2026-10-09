@@ -1475,7 +1475,7 @@ export default function MindARFrameApi({
 
     const tenantId = getAnalyticsTenantId();
     const response = await fetch(
-      `${apiBaseUrl.replace(/\/+$/, '')}/ecommerce/magic/v1/image/qr?customerCode=${encodeURIComponent(
+      `${apiBaseUrl.replace(/\/+$/, '')}/magic/magic/v1/image/qr?customerCode=${encodeURIComponent(
         normalizedCustomerCode
       )}`,
       {

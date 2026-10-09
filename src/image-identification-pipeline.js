@@ -1,6 +1,6 @@
 const DEFAULT_IDENTIFICATION_TIMEOUT_MS = 30000
-const DEFAULT_WS_URL = 'wss://backend.agavian.in/ecommerce/ws/magic-scan'
-const DEFAULT_QR_API_URL = 'https://backend.agavian.in/ecommerce/magic/v1/image/qr'
+const DEFAULT_WS_URL = 'wss://backend.agavian.in/magic/ws/magic-scan'
+const DEFAULT_QR_API_URL = 'https://backend.agavian.in/magic/magic/v1/image/qr'
 const DEFAULT_TENANT_CODE = 'TENT-136C2091'
 
 // Browser -> backend image settings.
