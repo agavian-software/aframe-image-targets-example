@@ -1,6 +1,6 @@
 const {test} = require('node:test')
 const assert = require('node:assert/strict')
-const {getVideoMaskConfig, prepareVideoMask} = require('../src/video-mask')
+const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask} = require('../src/video-mask')
 
 const imageSources = new Map()
 let imageLoads = 0
@@ -79,14 +79,29 @@ test('a failed upload can be retried after becoming available', async () => {
   assert.ok(await prepareVideoMask(config))
 })
 
-test('built-in shapes use a centered square within a rectangular target', async () => {
-  const circle = await prepareVideoMask(getVideoMaskConfig({shape: 'circle'}), 2)
+test('shape video surfaces stay square for portrait, landscape and square targets', () => {
+  for (const config of [{shape: 'circle'}, {shape: 'heart'}, {maskUrl: 'custom.png'}]) {
+    for (const [width, height] of [[0.79, 1], [2, 1], [1, 1]]) {
+      const surface = getVideoSurfaceSize(config, width, height)
+      assert.equal(surface.width, Math.min(width, height))
+      assert.equal(surface.height, surface.width)
+      // A square source needs no cover crop on this surface.
+      assert.equal(surface.width / surface.height, 1)
+    }
+  }
+  assert.deepEqual(getVideoSurfaceSize({}, 0.79, 1), {width: 0.79, height: 1})
+  assert.deepEqual(getVideoSurfaceSize({}, 2, 1), {width: 2, height: 1})
+})
+
+test('built-in shapes fill a square mask independently of target dimensions', async () => {
+  const circle = await prepareVideoMask(getVideoMaskConfig({shape: 'circle'}))
   assert.equal(circle.width, 512)
-  assert.equal(circle.height, 256)
-  assert.deepEqual(circle.commands.find(([name]) => name === 'translate'), ['translate', 128, 0])
-  assert.deepEqual(circle.commands.find(([name]) => name === 'scale'), ['scale', 256, 256])
-  const heart = await prepareVideoMask(getVideoMaskConfig({shape: 'heart'}), 0.5)
-  assert.equal(heart.width, 256)
+  assert.equal(circle.height, 512)
+  assert.deepEqual(circle.commands.find(([name]) => name === 'translate'), ['translate', 0, 0])
+  assert.deepEqual(circle.commands.find(([name]) => name === 'scale'), ['scale', 512, 512])
+  assert.deepEqual(circle.commands.find(([name]) => name === 'arc'), ['arc', 0.5, 0.5, 0.5, 0, Math.PI * 2])
+  const heart = await prepareVideoMask(getVideoMaskConfig({shape: 'heart'}))
+  assert.equal(heart.width, 512)
   assert.equal(heart.height, 512)
   assert.equal(heart.commands.filter(([name]) => name === 'bezierCurveTo').length, 4)
   assert.equal(await prepareVideoMask(getVideoMaskConfig({})), null)

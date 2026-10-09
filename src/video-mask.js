@@ -14,10 +14,18 @@ const getVideoMaskConfig = (entry, resolveUrl = value => value) => {
   }
 }
 
-const makeShapeMask = (shape, aspect) => {
+// Shape experiences use a square centered inside the tracked target. This
+// keeps square video frames and mask outlines independent of target aspect.
+const getVideoSurfaceSize = (config, width, height) => {
+  if (!config.maskUrl && !config.shape) return {width, height}
+  const size = Math.min(width, height)
+  return {width: size, height: size}
+}
+
+const makeShapeMask = (shape) => {
   const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(512 * Math.min(1, aspect)))
-  canvas.height = Math.max(1, Math.round(512 * Math.min(1, 1 / aspect)))
+  canvas.width = 512
+  canvas.height = 512
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, canvas.width, canvas.height)
@@ -92,12 +100,12 @@ const loadImageMask = (url, mode) => new Promise((resolve, reject) => {
   image.src = url
 })
 
-const prepareVideoMask = (config, aspect = 1) => {
+const prepareVideoMask = (config) => {
   const {maskUrl, maskMode, shape} = config
   if (!maskUrl && !shape) return Promise.resolve(null)
-  const key = JSON.stringify(maskUrl ? [maskUrl, maskMode] : [shape, aspect])
+  const key = JSON.stringify(maskUrl ? [maskUrl, maskMode] : [shape])
   if (maskCache.has(key)) return maskCache.get(key)
-  const pending = maskUrl ? loadImageMask(maskUrl, maskMode) : Promise.resolve(makeShapeMask(shape, aspect))
+  const pending = maskUrl ? loadImageMask(maskUrl, maskMode) : Promise.resolve(makeShapeMask(shape))
   maskCache.set(key, pending)
   pending.catch(() => maskCache.delete(key))
   // Bound CPU canvas memory across many scanned experiences.
@@ -105,4 +113,4 @@ const prepareVideoMask = (config, aspect = 1) => {
   return pending
 }
 
-module.exports = {getVideoMaskConfig, prepareVideoMask}
+module.exports = {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask}

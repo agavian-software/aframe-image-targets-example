@@ -1,6 +1,6 @@
 require('./index.css')
 
-const {getVideoMaskConfig, prepareVideoMask} = require('./video-mask')
+const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask} = require('./video-mask')
 
 const {
   imageIdentificationPipelineModule,
@@ -143,7 +143,8 @@ const registerMagicTargetVideoCover = () => {
         this.material.needsUpdate = true
       }
 
-      const geometry = new THREE.PlaneGeometry(this.data.width, this.data.height)
+      const {width, height} = getVideoSurfaceSize(this.data, this.data.width, this.data.height)
+      const geometry = new THREE.PlaneGeometry(width, height)
       if (!this.mesh) {
         this.mesh = new THREE.Mesh(geometry, this.material)
         this.el.setObject3D('mesh', this.mesh)
@@ -171,7 +172,7 @@ const registerMagicTargetVideoCover = () => {
       this.material.needsUpdate = true
       if (!hasMask) return
 
-      prepareVideoMask(this.data, this.data.width / this.data.height).then((canvas) => {
+      prepareVideoMask(this.data).then((canvas) => {
         if (request !== this.maskRequest) return
         this.maskTexture = new THREE.CanvasTexture(canvas)
         this.maskTexture.minFilter = THREE.LinearFilter
@@ -192,7 +193,8 @@ const registerMagicTargetVideoCover = () => {
       if (!video?.videoWidth || !video?.videoHeight || !this.videoTexture) return
 
       const sourceAspect = video.videoWidth / video.videoHeight
-      const targetAspect = this.data.width / this.data.height
+      const {width, height} = getVideoSurfaceSize(this.data, this.data.width, this.data.height)
+      const targetAspect = width / height
       const {repeatX, repeatY, offsetX, offsetY} = getCoverTextureTransform(sourceAspect, targetAspect)
       this.videoTexture.repeat.set(repeatX, repeatY)
       this.videoTexture.offset.set(offsetX, offsetY)
@@ -248,7 +250,7 @@ const loadImageTarget = (entry) => {
       const maskConfig = getVideoMaskConfig(entry, value => joinUrl(MAGIC_CDN_BASE, value))
       return getTargetSize(targetData.imagePath).then((targetSize) => {
         // Validate/download masks before activating a matched experience.
-        return prepareVideoMask(maskConfig, targetSize.width / targetSize.height).then(() => ({
+        return prepareVideoMask(maskConfig).then(() => ({
           targetData,
           targetName,
           targetSize,
@@ -529,8 +531,8 @@ document.addEventListener('DOMContentLoaded', () => {
     target.querySelectorAll('.magic-target-loader').forEach(loader => loader.remove())
 
     const targetSize = getSafeTargetSize(match.targetSize)
-    const width = targetSize.width * TARGET_VIDEO_OVERSCAN
-    const height = targetSize.height * TARGET_VIDEO_OVERSCAN
+    const {width, height} = getVideoSurfaceSize(match.maskConfig,
+      targetSize.width * TARGET_VIDEO_OVERSCAN, targetSize.height * TARGET_VIDEO_OVERSCAN)
     plane.setAttribute('magic-target-video-cover', Object.assign({
       video: '#magic-video',
       width,
