@@ -69,10 +69,13 @@ Each `videoUrlV1` entry can select a built-in shape or an uploaded image mask:
   use a white shape on a black background: white shows video, black hides video,
   and gray makes it partially transparent. `maskMode: "auto"` detects transparency;
   `"alpha"` or `"luminance"` explicitly selects the mask format.
-- Design custom masks with the same aspect ratio as the tracked image, since the
-  mask fills that image's rectangle. Built-in hearts and circles retain their shape
-  and are centered inside the tracked image. The video is cropped to fill the target
-  independently of the mask.
+- Design custom masks on a square canvas. Shape videos use a square surface centered
+  on the full uploaded target image. The target JSON's crop dimensions and offsets
+  map that surface from the tracking region to the original image, so a circle can
+  cover the whole disc even when only a smaller rectangle is used for tracking.
+  Square videos retain their full frame; other video ratios are cropped to cover.
+  To calibrate a physical frame, add `?shapeScale=1.3` to the AR page URL for a
+  30% larger shape diameter. The default is `1`; rectangular playback is unaffected.
 - Upload masks through your existing upload service and return their URL in the API
   response. The mask host must allow cross-origin image access (CORS). An ordinary
   photo with an opaque background needs a prepared mask to define its outline.

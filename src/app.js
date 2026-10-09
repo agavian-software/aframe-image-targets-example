@@ -1,7 +1,7 @@
 require('./index.css')
 
 const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask} = require('./video-mask')
-const {getTrackedTargetSize, getTargetVideoSize} = require('./target-size')
+const {getTrackedTargetSize, getTargetVideoLayout} = require('./target-size')
 
 const {
   imageIdentificationPipelineModule,
@@ -27,6 +27,7 @@ const getMagicEntries = (response) => {
 const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
 
 const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
+const SHAPE_VIDEO_SCALE = Number(new URLSearchParams(window.location.search).get('shapeScale')) || 1
 const TARGET_LOST_GRACE_MS = 2500
 const SCAN_STATUS_SEARCHING = 'Searching image...'
 const SCAN_STATUS_LOADING_MAGIC = 'Loading magic...'
@@ -379,16 +380,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const experience = targetExperiences.get(targetName)
     const targetSize = getTrackedTargetSize(geometry)
     if (!experience || !targetSize) return
-    const {width, height} = getTargetVideoSize(experience.maskConfig, targetSize)
-    if (experience.width === width && experience.height === height) return
+    const {width, height, x, y} = getTargetVideoLayout(
+      experience.maskConfig, targetSize, experience.targetProperties, SHAPE_VIDEO_SCALE)
+    if (experience.width === width && experience.height === height &&
+      experience.x === x && experience.y === y) return
 
     experience.width = width
     experience.height = height
+    experience.x = x
+    experience.y = y
+    experience.plane.object3D.position.x = x
+    experience.plane.object3D.position.y = y
+    experience.loadingPanel.object3D.position.x = x
+    experience.loadingPanel.object3D.position.y = y
     experience.plane.setAttribute('magic-target-video-cover', Object.assign({
       video: '#magic-video', width, height,
     }, experience.maskConfig))
     experience.loadingPanel.object3D.scale.set(
       width / experience.loadingSize.width, height / experience.loadingSize.height, 1)
+    console.log('[magic] Video layout:', {targetName, trackedSize: targetSize,
+      crop: experience.targetProperties, video: {width, height, x, y}})
   }
 
   scene.addEventListener('xrimagescanning', (event) => {
@@ -556,7 +567,9 @@ document.addEventListener('DOMContentLoaded', () => {
     target.querySelectorAll('.magic-target-loader').forEach(loader => loader.remove())
 
     const targetSize = getSafeTargetSize(match.targetSize)
-    const {width, height} = getTargetVideoSize(match.maskConfig, targetSize)
+    const {width, height, x, y} = getTargetVideoLayout(
+      match.maskConfig, targetSize, match.targetData.properties, SHAPE_VIDEO_SCALE)
+    plane.setAttribute('position', {x, y, z: 0})
     plane.setAttribute('magic-target-video-cover', Object.assign({
       video: '#magic-video',
       width,
@@ -570,6 +583,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadingText = document.createElement('a-entity')
 
     loadingPanel.setAttribute('visible', false)
+    loadingPanel.setAttribute('position', {x, y, z: 0})
     loadingPanel.classList.add('magic-target-loader')
     loadingBackground.setAttribute('geometry', {
       primitive: 'plane',
@@ -624,6 +638,9 @@ document.addEventListener('DOMContentLoaded', () => {
       plane,
       width,
       height,
+      x,
+      y,
+      targetProperties: match.targetData.properties,
       loadingPanel,
       loadingSize: {width, height},
       loadingText,
