@@ -14,7 +14,7 @@ test('default shape scale covers a narrow target rim and accepts explicit calibr
   assert.deepEqual(getTargetVideoLayout({shape: 'circle'}, tracked, properties, getShapeVideoScale(null)),
     {width: 1.1, height: 1.1, x: 0, y: 0})
   assert.deepEqual(getTargetVideoLayout({}, tracked, properties, getShapeVideoScale(null)),
-    {width: 1.04, height: 1.04, x: 0, y: 0})
+    {width: 0.75, height: 0.75, x: 0, y: 0})
 })
 
 test('square tracked geometry fills the disc despite portrait recognition raster dimensions', () => {
@@ -30,7 +30,7 @@ test('shape boundaries match the target without rectangular-video overscan', () 
   for (const config of [{shape: 'circle'}, {shape: 'heart'}, {maskUrl: 'custom.png'}]) {
     assert.deepEqual(getTargetVideoSize(config, tracked), {width: 0.8, height: 0.8})
   }
-  assert.deepEqual(getTargetVideoSize({}, tracked), {width: 0.8 * 1.04, height: 1.04})
+  assert.deepEqual(getTargetVideoSize({}, tracked), {width: 0.8, height: 1})
 })
 
 test('missing or invalid tracking geometry is ignored, preserving the initial size', () => {
@@ -54,20 +54,22 @@ test('off-center tracking crops translate video to the original image center', (
   }), {width: 1, height: 1, x: 0.1, y: -0.05})
 })
 
-test('unmasked square playback covers the original square despite a portrait tracking crop', () => {
+test('unmasked square playback fits inside a portrait tracking crop', () => {
   const fullCrop = {originalWidth: 1000, originalHeight: 1000, width: 1000, height: 1000}
   assert.deepEqual(getTargetVideoLayout({shape: 'circle'}, {width: 1, height: 1}, fullCrop),
     {width: 1, height: 1, x: 0, y: 0})
   const cropped = {...fullCrop, width: 750, left: 125}
   assert.deepEqual(getTargetVideoLayout({}, {width: 0.75, height: 1}, cropped),
-    {width: 1.04, height: 1.04, x: 0, y: 0})
+    {width: 0.75, height: 0.75, x: 0, y: 0})
+  assert.deepEqual(getTargetVideoLayout({}, {width: 1, height: 1}, fullCrop),
+    {width: 1, height: 1, x: 0, y: 0})
 })
 
-test('unmasked playback includes all four white borders beyond the tracking crop', () => {
+test('unmasked playback stays within the tracking crop without adding borders', () => {
   const properties = {originalWidth: 1000, originalHeight: 1000,
     width: 800, height: 600, left: 100, top: 200}
   assert.deepEqual(getTargetVideoLayout({}, {width: 0.8, height: 0.6}, properties),
-    {width: 1.04, height: 1.04, x: 0, y: 0})
+    {width: 0.6, height: 0.6, x: 0, y: 0})
 })
 
 test('square originals stay square when tracking dimensions have a landscape aspect', () => {
@@ -75,23 +77,23 @@ test('square originals stay square when tracking dimensions have a landscape asp
     width: 800, height: 600, left: 100, top: 100}
   // Recognition geometry need not have the same aspect as the source pixels.
   assert.deepEqual(getTargetVideoLayout({}, {width: 0.8, height: 0.45}, properties),
-    {width: 1.04, height: 1.04, x: 0, y: -0.1})
+    {width: 0.45, height: 0.45, x: 0, y: 0})
 })
 
 test('original image aspect is used when crop metadata is absent', () => {
   assert.deepEqual(getTargetVideoLayout({}, {width: 1, height: 0.5625}, {
     originalWidth: 1080, originalHeight: 1080,
-  }), {width: 1.04, height: 1.04, x: 0, y: 0})
+  }), {width: 0.5625, height: 0.5625, x: 0, y: 0})
   assert.deepEqual(getTargetVideoLayout({}, {width: 1, height: 0.5625}, {
     originalWidth: 1080, originalHeight: 1440,
-  }), {width: 1.04, height: (1440 / 1080) * 1.04, x: 0, y: 0})
+  }), {width: 0.421875, height: 0.5625, x: 0, y: 0})
 })
 
-test('unmasked playback maps off-center crops back to the original rectangular image', () => {
+test('unmasked playback is centered within an off-center tracking crop', () => {
   const properties = {originalWidth: 1200, originalHeight: 1000,
     width: 600, height: 800, left: 100, top: 50}
   assert.deepEqual(getTargetVideoLayout({}, {width: 0.6, height: 0.8}, properties),
-    {width: 1.2 * 1.04, height: 1.04, x: 0.2, y: -0.05})
+    {width: 0.6, height: 0.5, x: 0, y: 0})
 })
 
 test('invalid crop metadata does not enlarge or shift the video', () => {
@@ -109,8 +111,23 @@ test('optional calibration changes shape diameter without changing its center or
   assert.deepEqual(getTargetVideoLayout({shape: 'circle'}, tracked, properties, 1.3),
     {width: 1.3, height: 1.3, x: 0.1, y: -0.05})
   assert.deepEqual(getTargetVideoLayout({}, tracked, properties, 1.3),
-    {width: 1.04, height: 1.04, x: 0.1, y: -0.05})
+    {width: 0.6, height: 0.6, x: 0, y: 0})
   for (const scale of [-1, NaN, Infinity, 0]) {
     assert.equal(getTargetVideoLayout({shape: 'circle'}, tracked, properties, scale).width, 1)
+  }
+})
+
+test('unmasked playback never exceeds either target dimension across aspects', () => {
+  for (const tracked of [{width: 1, height: 0.5}, {width: 0.5, height: 1},
+    {width: 0.7, height: 0.7}]) {
+    for (const aspect of [0.75, 1, 1.5]) {
+      const layout = getTargetVideoLayout({}, tracked,
+        {originalWidth: 1200 * aspect, originalHeight: 1200})
+      assert.ok(layout.width <= tracked.width + 1e-12)
+      assert.ok(layout.height <= tracked.height + 1e-12)
+      assert.ok(Math.abs(layout.width / layout.height - aspect) < 1e-12)
+      assert.equal(layout.x, 0)
+      assert.equal(layout.y, 0)
+    }
   }
 })

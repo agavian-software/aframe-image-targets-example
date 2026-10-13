@@ -18,12 +18,21 @@ const getTrackedTargetSize = (geometry = {}) => {
 
 const getTargetVideoSize = (config, targetSize, shapeScale = 1) => {
   const validScale = Number.isFinite(shapeScale) && shapeScale > 0 ? shapeScale : 1
-  const overscan = config.maskUrl || config.shape ? validScale : 1.04
+  const overscan = config.maskUrl || config.shape ? validScale : 1
   return getVideoSurfaceSize(config, targetSize.width * overscan, targetSize.height * overscan)
 }
 
 const getTargetVideoLayout = (config, trackedSize, properties = {}, shapeScale = 1) => {
   const {width, height, originalWidth, originalHeight, left = 0, top = 0} = properties || {}
+  if (!config.maskUrl && !config.shape) {
+    // Fit playback inside the tracked image. Expanding to the original upload
+    // includes borders/crop margins and can spill outside the physical target.
+    const aspect = Number.isFinite(originalWidth) && originalWidth > 0 &&
+      Number.isFinite(originalHeight) && originalHeight > 0
+      ? originalWidth / originalHeight : trackedSize.width / trackedSize.height
+    const fittedWidth = Math.min(trackedSize.width, trackedSize.height * aspect)
+    return {width: fittedWidth, height: fittedWidth / aspect, x: 0, y: 0}
+  }
   const validCrop = [width, height, originalWidth, originalHeight].every(
     value => Number.isFinite(value) && value > 0) &&
     Number.isFinite(left) && Number.isFinite(top) && left >= 0 && top >= 0 &&
@@ -41,8 +50,6 @@ const getTargetVideoLayout = (config, trackedSize, properties = {}, shapeScale =
 
   // XR8 anchors the tracking crop. Map the full uploaded image back into
   // that coordinate system, including any off-center crop translation.
-  // Unmasked videos need this too: a square upload can have a rectangular
-  // tracking crop, especially when its white border is excluded from tracking.
   const unitsPerPixelX = trackedSize.width / width
   // Image pixels have one uniform scale. Independent X/Y scales can turn
   // a square original into a landscape plane when recognition is resized.
