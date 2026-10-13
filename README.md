@@ -85,6 +85,10 @@ Each `videoUrlV1` entry can select a built-in shape or an uploaded image mask:
 Masks are loaded before the experience activates. If a mask cannot be loaded, the
 app resumes identification and logs the error instead of showing an unmasked video.
 Entries with no mask or shape keep rectangular playback.
+Their video surface also maps to the full uploaded image using the target JSON's
+crop dimensions and offsets, including borders outside the tracking crop. A square
+upload with a square video needs no mask, even if its tracking crop is rectangular.
+Unmasked playback retains the existing 4% enlargement to cover small tracking errors.
 
 ### Preparing Target Images
 

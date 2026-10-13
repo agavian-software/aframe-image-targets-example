@@ -14,7 +14,7 @@ test('default shape scale covers a narrow target rim and accepts explicit calibr
   assert.deepEqual(getTargetVideoLayout({shape: 'circle'}, tracked, properties, getShapeVideoScale(null)),
     {width: 1.1, height: 1.1, x: 0, y: 0})
   assert.deepEqual(getTargetVideoLayout({}, tracked, properties, getShapeVideoScale(null)),
-    {width: 0.75 * 1.04, height: 1.04, x: 0, y: 0})
+    {width: 1.04, height: 1.04, x: 0, y: 0})
 })
 
 test('square tracked geometry fills the disc despite portrait recognition raster dimensions', () => {
@@ -54,13 +54,27 @@ test('off-center tracking crops translate video to the original image center', (
   }), {width: 1, height: 1, x: 0.1, y: -0.05})
 })
 
-test('full square uploads need no enlargement and rectangular playback keeps its crop', () => {
+test('unmasked square playback covers the original square despite a portrait tracking crop', () => {
   const fullCrop = {originalWidth: 1000, originalHeight: 1000, width: 1000, height: 1000}
   assert.deepEqual(getTargetVideoLayout({shape: 'circle'}, {width: 1, height: 1}, fullCrop),
     {width: 1, height: 1, x: 0, y: 0})
   const cropped = {...fullCrop, width: 750, left: 125}
   assert.deepEqual(getTargetVideoLayout({}, {width: 0.75, height: 1}, cropped),
-    {width: 0.75 * 1.04, height: 1.04, x: 0, y: 0})
+    {width: 1.04, height: 1.04, x: 0, y: 0})
+})
+
+test('unmasked playback includes all four white borders beyond the tracking crop', () => {
+  const properties = {originalWidth: 1000, originalHeight: 1000,
+    width: 800, height: 600, left: 100, top: 200}
+  assert.deepEqual(getTargetVideoLayout({}, {width: 0.8, height: 0.6}, properties),
+    {width: 1.04, height: 1.04, x: 0, y: 0})
+})
+
+test('unmasked playback maps off-center crops back to the original rectangular image', () => {
+  const properties = {originalWidth: 1200, originalHeight: 1000,
+    width: 600, height: 800, left: 100, top: 50}
+  assert.deepEqual(getTargetVideoLayout({}, {width: 0.6, height: 0.8}, properties),
+    {width: 1.2 * 1.04, height: 1.04, x: 0.2, y: -0.05})
 })
 
 test('invalid crop metadata does not enlarge or shift the video', () => {
@@ -78,7 +92,7 @@ test('optional calibration changes shape diameter without changing its center or
   assert.deepEqual(getTargetVideoLayout({shape: 'circle'}, tracked, properties, 1.3),
     {width: 1.3, height: 1.3, x: 0.1, y: -0.05})
   assert.deepEqual(getTargetVideoLayout({}, tracked, properties, 1.3),
-    {width: 0.6 * 1.04, height: 0.8 * 1.04, x: 0, y: 0})
+    {width: 1.04, height: 1.04, x: 0.1, y: -0.05})
   for (const scale of [-1, NaN, Infinity, 0]) {
     assert.equal(getTargetVideoLayout({shape: 'circle'}, tracked, properties, scale).width, 1)
   }
