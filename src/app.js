@@ -32,20 +32,21 @@ const TARGET_LOST_GRACE_MS = 2500
 const SCAN_STATUS_SEARCHING = 'Searching image...'
 const SCAN_STATUS_LOADING_MAGIC = 'Loading magic...'
 
-const getTargetSize = imageUrl => new Promise((resolve) => {
+const getTargetSize = (imageUrl, fallback = DEFAULT_TARGET_SIZE) => new Promise((resolve) => {
   const image = new Image()
 
   image.onload = () => {
     const aspect = image.naturalWidth / image.naturalHeight
     if (!Number.isFinite(aspect) || aspect <= 0) {
-      resolve(DEFAULT_TARGET_SIZE)
+      resolve(fallback)
       return
     }
 
     // Approximate local dimensions until XR8 reports the target geometry.
-    resolve({width: Math.min(aspect, 1), height: Math.min(1 / aspect, 1)})
+    resolve({width: Math.min(aspect, 1), height: Math.min(1 / aspect, 1),
+      originalWidth: image.naturalWidth, originalHeight: image.naturalHeight})
   }
-  image.onerror = () => resolve(DEFAULT_TARGET_SIZE)
+  image.onerror = () => resolve(fallback)
   image.src = imageUrl
 })
 
@@ -251,7 +252,20 @@ const loadImageTarget = (entry) => {
       const maskConfig = getVideoMaskConfig(entry, value => joinUrl(MAGIC_CDN_BASE, value))
       // Recognition luminance images may be resized to 480x640. Use the
       // actual tracking crop for the initial aspect, not that raster size.
-      return getTargetSize(targetData.resources.croppedImage).then((targetSize) => {
+      return Promise.all([
+        getTargetSize(targetData.resources.croppedImage),
+        getTargetSize(targetData.resources.originalImage, null),
+      ]).then((sizes) => {
+        const targetSize = sizes[0]
+        const originalSize = sizes[1]
+        // Some target JSONs omit the original dimensions. Read the uploaded
+        // image so a rectangular recognition crop cannot dictate playback aspect.
+        if (originalSize) {
+          targetData.properties = Object.assign({}, targetData.properties, {
+            originalWidth: originalSize.originalWidth,
+            originalHeight: originalSize.originalHeight,
+          })
+        }
         // Validate/download masks before activating a matched experience.
         return prepareVideoMask(maskConfig).then(() => ({
           targetData,
@@ -406,6 +420,9 @@ document.addEventListener('DOMContentLoaded', () => {
     event.detail?.imageTargets?.forEach(({name, geometry}) => updateTargetGeometry(name, geometry))
   })
   scene.addEventListener('xrimageupdated', (event) => {
+    updateTargetGeometry(event.detail?.name, event.detail)
+  })
+  scene.addEventListener('xrimagefound', (event) => {
     updateTargetGeometry(event.detail?.name, event.detail)
   })
 

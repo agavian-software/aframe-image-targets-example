@@ -70,6 +70,23 @@ test('unmasked playback includes all four white borders beyond the tracking crop
     {width: 1.04, height: 1.04, x: 0, y: 0})
 })
 
+test('square originals stay square when tracking dimensions have a landscape aspect', () => {
+  const properties = {originalWidth: 1000, originalHeight: 1000,
+    width: 800, height: 600, left: 100, top: 100}
+  // Recognition geometry need not have the same aspect as the source pixels.
+  assert.deepEqual(getTargetVideoLayout({}, {width: 0.8, height: 0.45}, properties),
+    {width: 1.04, height: 1.04, x: 0, y: -0.1})
+})
+
+test('original image aspect is used when crop metadata is absent', () => {
+  assert.deepEqual(getTargetVideoLayout({}, {width: 1, height: 0.5625}, {
+    originalWidth: 1080, originalHeight: 1080,
+  }), {width: 1.04, height: 1.04, x: 0, y: 0})
+  assert.deepEqual(getTargetVideoLayout({}, {width: 1, height: 0.5625}, {
+    originalWidth: 1080, originalHeight: 1440,
+  }), {width: 1.04, height: (1440 / 1080) * 1.04, x: 0, y: 0})
+})
+
 test('unmasked playback maps off-center crops back to the original rectangular image', () => {
   const properties = {originalWidth: 1200, originalHeight: 1000,
     width: 600, height: 800, left: 100, top: 50}

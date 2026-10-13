@@ -89,6 +89,10 @@ Their video surface also maps to the full uploaded image using the target JSON's
 crop dimensions and offsets, including borders outside the tracking crop. A square
 upload with a square video needs no mask, even if its tracking crop is rectangular.
 Unmasked playback retains the existing 4% enlargement to cover small tracking errors.
+The original image is also loaded to determine its actual dimensions when target
+metadata is incomplete. Playback uses a uniform pixel scale to preserve that
+image's aspect, even when recognition geometry has a different aspect. A square
+image and square video therefore use a square plane without cropping the video.
 
 ### Preparing Target Images
 

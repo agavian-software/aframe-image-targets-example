@@ -29,7 +29,14 @@ const getTargetVideoLayout = (config, trackedSize, properties = {}, shapeScale =
     Number.isFinite(left) && Number.isFinite(top) && left >= 0 && top >= 0 &&
     left + width <= originalWidth && top + height <= originalHeight
   if (!validCrop) {
-    return Object.assign(getTargetVideoSize(config, trackedSize, shapeScale), {x: 0, y: 0})
+    // Even without crop offsets, the uploaded image determines the aspect.
+    // Keep the tracked width as the size reference rather than stretching a
+    // square upload across a landscape recognition region.
+    const fullSize = Number.isFinite(originalWidth) && originalWidth > 0 &&
+      Number.isFinite(originalHeight) && originalHeight > 0
+      ? {width: trackedSize.width, height: trackedSize.width * originalHeight / originalWidth}
+      : trackedSize
+    return Object.assign(getTargetVideoSize(config, fullSize, shapeScale), {x: 0, y: 0})
   }
 
   // XR8 anchors the tracking crop. Map the full uploaded image back into
@@ -37,7 +44,9 @@ const getTargetVideoLayout = (config, trackedSize, properties = {}, shapeScale =
   // Unmasked videos need this too: a square upload can have a rectangular
   // tracking crop, especially when its white border is excluded from tracking.
   const unitsPerPixelX = trackedSize.width / width
-  const unitsPerPixelY = trackedSize.height / height
+  // Image pixels have one uniform scale. Independent X/Y scales can turn
+  // a square original into a landscape plane when recognition is resized.
+  const unitsPerPixelY = unitsPerPixelX
   const fullSize = {
     width: originalWidth * unitsPerPixelX,
     height: originalHeight * unitsPerPixelY,
