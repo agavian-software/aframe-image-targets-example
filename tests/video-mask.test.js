@@ -1,6 +1,6 @@
 const {test} = require('node:test')
 const assert = require('node:assert/strict')
-const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask} = require('../src/video-mask')
+const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask, prepareVideoMaskConfig} = require('../src/video-mask')
 
 const imageSources = new Map()
 let imageLoads = 0
@@ -14,9 +14,9 @@ global.Image = class {
         this.onerror?.()
         return
       }
-      this.naturalWidth = source.length / 4
-      this.naturalHeight = 1
-      this.pixels = source
+      this.naturalWidth = source.width || source.length / 4
+      this.naturalHeight = source.height || 1
+      this.pixels = source.pixels || source
       this.onload?.()
     })
   }
@@ -105,4 +105,37 @@ test('built-in shapes fill a square mask independently of target dimensions', as
   assert.equal(heart.height, 512)
   assert.equal(heart.commands.filter(([name]) => name === 'bezierCurveTo').length, 4)
   assert.equal(await prepareVideoMask(getVideoMaskConfig({})), null)
+})
+
+test('custom square cutout on a portrait canvas keeps its proportions after loading', async () => {
+  // Same 9:16 canvas ratio as the actual 945x1680 backend SquareMask.
+  const pixels = new Uint8ClampedArray(9 * 16 * 4)
+  for (let y = 3; y < 12; y += 1) {
+    for (let x = 0; x < 9; x += 1) {
+      pixels.fill(255, (y * 9 + x) * 4, (y * 9 + x + 1) * 4)
+    }
+  }
+  imageSources.set('portrait-square-mask.webp', {width: 9, height: 16, pixels})
+  const config = await prepareVideoMaskConfig(getVideoMaskConfig({shape: {
+    arShapeId: 9, shapeName: 'SquareMask', customShapeUrl: 'portrait-square-mask.webp',
+  }}))
+  assert.equal(config.maskAspect, 9 / 16)
+  const surface = getVideoSurfaceSize(config, 1, 1)
+  assert.deepEqual(surface, {width: 9 / 16, height: 1})
+  // The 9x9 cutout must remain square in world coordinates.
+  assert.equal(surface.width, surface.height * 9 / 16)
+  const canvas = await prepareVideoMask(config)
+  assert.equal(canvas.pixels[1], 0)
+  assert.equal(canvas.pixels[(3 * 9) * 4 + 1], 255)
+  assert.equal(canvas.pixels[(12 * 9) * 4 + 1], 0)
+})
+
+test('custom canvas aspect fits portrait and landscape targets and ignores invalid ratios', () => {
+  assert.deepEqual(getVideoSurfaceSize({maskUrl: 'mask', maskAspect: 9 / 16}, 2, 1),
+    {width: 9 / 16, height: 1})
+  assert.deepEqual(getVideoSurfaceSize({maskUrl: 'mask', maskAspect: 16 / 9}, 1, 2),
+    {width: 1, height: 9 / 16})
+  for (const maskAspect of [0, -1, NaN, Infinity]) {
+    assert.deepEqual(getVideoSurfaceSize({maskUrl: 'mask', maskAspect}, 2, 1), {width: 1, height: 1})
+  }
 })

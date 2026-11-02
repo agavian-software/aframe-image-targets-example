@@ -65,15 +65,24 @@ Each `videoUrlV1` entry can select a built-in shape or an uploaded image mask:
 - Set `maskUrl` to a custom mask image URL. `customShapeUrl` and
   `shape: {"customShapeUrl": "..."}` are also supported. A custom URL takes priority
   over a built-in shape; relative URLs resolve against the configured video CDN.
+  Backend `frameShape: 9` selects a custom mask: supply its URL in `maskUrl`
+  or `customShapeUrl`. These fields can be on the response or an individual
+  `videoUrlV1` entry; entry masks take priority. ID 9 with no URL is rejected
+  instead of displaying a rectangular video.
 - A transparent PNG/WebP uses its transparency as the outline. For an opaque mask,
   use a white shape on a black background: white shows video, black hides video,
   and gray makes it partially transparent. `maskMode: "auto"` detects transparency;
   `"alpha"` or `"luminance"` explicitly selects the mask format.
-- Design custom masks on a square canvas. Shape videos use a square surface centered
-  on the full uploaded target image. The target JSON's crop dimensions and offsets
+- Custom mask canvases keep their original aspect ratio, including black or
+  transparent padding. A square cutout on a portrait canvas keeps its proportions.
+  The full mask canvas fits inside the full uploaded target image. Built-in shapes
+  use a square surface. The target JSON's crop dimensions and offsets
   map that surface from the tracking region to the original image, so a circle can
   cover the whole disc even when only a smaller rectangle is used for tracking.
   Square videos retain their full frame; other video ratios are cropped to cover.
+  A portrait video stays upright and fills a square mask without stretching:
+  its top and bottom are cropped equally. A landscape video is cropped equally
+  on the left and right. The mask outline remains unchanged by the video crop.
   Shape playback defaults to `shapeScale=1.1`, adding 10% to the diameter to cover
   a narrow printed rim. To calibrate a physical frame, add `?shapeScale=1.12` to
   the AR page URL for 12% enlargement relative to the target, or `shapeScale=1`

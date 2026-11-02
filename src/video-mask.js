@@ -7,6 +7,11 @@ const getVideoMaskConfig = (entry, resolveUrl = value => value) => {
   const custom = shape && Object(shape) === shape ? shape : {}
   const url = entry.maskUrl || entry.customShapeUrl || custom.customShapeUrl || ''
   const mode = entry.maskMode || custom.maskMode || 'auto'
+  // ID 9 is a backend custom mask, so its URL must survive normalization.
+  // Avoid silently showing a rectangular video when the mask is missing.
+  if (Number(custom.arShapeId ?? shape) === 9 && !url) {
+    throw new Error('Custom video shape 9 requires a maskUrl or customShapeUrl')
+  }
   return {
     maskUrl: url ? resolveUrl(url) : '',
     maskMode: ['alpha', 'luminance'].includes(mode) ? mode : 'auto',
@@ -14,12 +19,15 @@ const getVideoMaskConfig = (entry, resolveUrl = value => value) => {
   }
 }
 
-// Shape experiences use a square centered inside the tracked target. This
-// keeps square video frames and mask outlines independent of target aspect.
+// Keep the whole custom mask canvas proportional, including its padding.
+// A square cutout can live inside a portrait canvas; squeezing that canvas
+// onto a square plane would turn the cutout into a landscape rectangle.
 const getVideoSurfaceSize = (config, width, height) => {
   if (!config.maskUrl && !config.shape) return {width, height}
-  const size = Math.min(width, height)
-  return {width: size, height: size}
+  const aspect = config.maskUrl && Number.isFinite(config.maskAspect) && config.maskAspect > 0
+    ? config.maskAspect : 1
+  const surfaceHeight = Math.min(height, width / aspect)
+  return {width: surfaceHeight * aspect, height: surfaceHeight}
 }
 
 const makeShapeMask = (shape) => {
@@ -113,4 +121,10 @@ const prepareVideoMask = (config) => {
   return pending
 }
 
-module.exports = {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask}
+const prepareVideoMaskConfig = config => prepareVideoMask(config).then(canvas => (
+  config.maskUrl && canvas
+    ? Object.assign({}, config, {maskAspect: canvas.width / canvas.height})
+    : config
+))
+
+module.exports = {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask, prepareVideoMaskConfig}

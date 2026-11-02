@@ -97,3 +97,14 @@ test('optional calibration changes shape diameter without changing its center or
     assert.equal(getTargetVideoLayout({shape: 'circle'}, tracked, properties, scale).width, 1)
   }
 })
+
+test('portrait mask canvas keeps its aspect through full-image crop mapping and overscan', () => {
+  const config = {maskUrl: 'SquareMask.webp', maskAspect: 945 / 1680}
+  const layout = getTargetVideoLayout(config, {width: 797 / 1063, height: 1}, {
+    left: 133, top: 0, width: 797, height: 1063, originalWidth: 1062, originalHeight: 1063,
+  }, 1.1)
+  assert.equal(layout.width, 1.1 * 9 / 16)
+  assert.equal(layout.height, 1.1)
+  assert.equal(layout.y, 0)
+  assert.ok(Math.abs(layout.x) < 0.001)
+})

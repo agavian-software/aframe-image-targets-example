@@ -1,6 +1,7 @@
 require('./index.css')
 
-const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask} = require('./video-mask')
+const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask, prepareVideoMaskConfig} = require('./video-mask')
+const {getMagicEntries} = require('./magic-entries')
 const {getShapeVideoScale, getTrackedTargetSize, getTargetVideoLayout} = require('./target-size')
 
 const {
@@ -15,13 +16,6 @@ const joinUrl = (base, value) => {
   if (!value) return ''
   if (isAbsoluteUrl(value)) return value
   return `${String(base).replace(/\/$/, '')}/${String(value).replace(/^\//, '')}`
-}
-
-const getMagicEntries = (response) => {
-  const value = response?.videoUrlV1
-  return (Array.isArray(value) ? value : value ? [value] : [])
-    .filter(item => item && Object(item) === item && item.targetName && item.videoUrl)
-    .map(item => Object.assign({}, item, {shape: item.shape ?? item.frameShape ?? response.frameShape}))
 }
 
 const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
@@ -100,6 +94,7 @@ const registerMagicTargetVideoCover = () => {
       height: {type: 'number', default: 1},
       maskUrl: {type: 'string', default: ''},
       maskMode: {type: 'string', default: 'auto'},
+      maskAspect: {type: 'number', default: 1},
       shape: {type: 'string', default: ''},
     },
 
@@ -119,6 +114,7 @@ const registerMagicTargetVideoCover = () => {
 
       if (!this.videoTexture || this.videoTexture.image !== video) {
         oldData.video?.removeEventListener('loadedmetadata', this.onMetadata)
+        oldData.video?.removeEventListener('resize', this.onMetadata)
         this.videoTexture?.dispose?.()
         this.videoTexture = new THREE.VideoTexture(video)
         this.videoTexture.minFilter = THREE.LinearFilter
@@ -156,6 +152,10 @@ const registerMagicTargetVideoCover = () => {
 
       video.removeEventListener('loadedmetadata', this.onMetadata)
       video.addEventListener('loadedmetadata', this.onMetadata)
+      // Recalculate if the decoded dimensions change after metadata (for
+      // example, when switching from a landscape source to a portrait one).
+      video.removeEventListener('resize', this.onMetadata)
+      video.addEventListener('resize', this.onMetadata)
       this.updateTextureCover()
       if (['maskUrl', 'maskMode', 'shape', 'width', 'height'].some(key => oldData[key] !== this.data[key])) {
         this.updateMask()
@@ -205,6 +205,7 @@ const registerMagicTargetVideoCover = () => {
     remove() {
       this.maskRequest += 1
       this.data.video?.removeEventListener('loadedmetadata', this.onMetadata)
+      this.data.video?.removeEventListener('resize', this.onMetadata)
       this.el.removeObject3D('mesh')
       this.mesh?.geometry?.dispose?.()
       this.material?.dispose?.()
@@ -253,11 +254,11 @@ const loadImageTarget = (entry) => {
       // actual tracking crop for the initial aspect, not that raster size.
       return getTargetSize(targetData.resources.croppedImage).then((targetSize) => {
         // Validate/download masks before activating a matched experience.
-        return prepareVideoMask(maskConfig).then(() => ({
+        return prepareVideoMaskConfig(maskConfig).then(preparedConfig => ({
           targetData,
           targetName,
           targetSize,
-          maskConfig,
+          maskConfig: preparedConfig,
           videoUrl: joinUrl(MAGIC_CDN_BASE, entry.videoUrl),
         }))
       })
