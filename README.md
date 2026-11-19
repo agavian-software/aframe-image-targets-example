@@ -89,6 +89,16 @@ Successful API results are logged as `[image-identification] Identified image re
 also emitted as an `imageidentified` event on `window`. The app loads the returned
 targets and shape masks before activating image-target playback.
 
+### Target confetti
+
+While a video plays on a tracked image, a Three.js particle system streams colorful,
+tumbling confetti around its edges. It follows the video surface's size, crop offset,
+and target pose, keeping the center clear. Confetti hides during pauses, buffering,
+target loss, and webpage/fullscreen playback, then returns with target playback.
+Each target uses one GPU-animated cloud of 180 particles through A-Frame's existing
+Three.js renderer, with no extra library or image assets. Geometry, materials, and
+media listeners are released when the target is cleared.
+
 ### Video shape masks
 
 Masks apply to playback on the image target. The webpage player displays the

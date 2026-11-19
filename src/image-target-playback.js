@@ -1,6 +1,7 @@
 const {getVideoMaskConfig, prepareVideoMaskConfig} = require('./video-mask')
 const {getShapeVideoScale, getTrackedTargetSize, getTargetVideoLayout} = require('./target-size')
 const {registerMagicTargetVideoCover} = require('./video-cover')
+const {registerMagicTargetConfetti} = require('./target-confetti')
 
 const MAGIC_CDN_BASE = 'https://d1y2o0xoe5yirl.cloudfront.net'
 
@@ -96,11 +97,13 @@ const loadImageTarget = (entry) => {
 
 const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
   registerMagicTargetVideoCover(window)
+  registerMagicTargetConfetti(window)
   const targetExperiences = new Map()
   let loadGeneration = 0
 
   const hide = () => {
     targetExperiences.forEach(({plane, loadingPanel}) => {
+      plane.setAttribute('magic-target-confetti', 'enabled', false)
       plane.setAttribute('visible', false)
       loadingPanel.setAttribute('visible', false)
     })
@@ -152,6 +155,9 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       width,
       height,
     }, match.maskConfig))
+    plane.setAttribute('magic-target-confetti', {
+      video: '#magic-video', width, height, enabled: false,
+    })
     plane.setAttribute('visible', false)
 
     const loadingPanel = document.createElement('a-entity')
@@ -248,6 +254,7 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
     experience.plane.setAttribute('magic-target-video-cover', Object.assign({
       video: '#magic-video', width, height,
     }, experience.maskConfig))
+    experience.plane.setAttribute('magic-target-confetti', {video: '#magic-video', width, height})
     experience.loadingPanel.object3D.scale.set(
       width / experience.loadingSize.width, height / experience.loadingSize.height, 1)
     console.log('[magic] Video layout:', {targetName, trackedSize: targetSize,
@@ -291,7 +298,10 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
     show(targetName) {
       hide()
       const experience = targetExperiences.get(targetName)
-      if (experience?.tracked) experience.plane.setAttribute('visible', true)
+      if (experience?.tracked) {
+        experience.plane.setAttribute('visible', true)
+        experience.plane.setAttribute('magic-target-confetti', 'enabled', true)
+      }
     },
     isTracked: targetName => Boolean(targetExperiences.get(targetName)?.tracked),
     showLoading(targetName, message) {
