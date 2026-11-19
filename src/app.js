@@ -1,289 +1,30 @@
 require('./index.css')
 
-const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask, prepareVideoMaskConfig} = require('./video-mask')
 const {getMagicEntries} = require('./magic-entries')
-const {getShapeVideoScale, getTrackedTargetSize, getTargetVideoLayout} = require('./target-size')
 const {cameraFocusPipelineModule} = require('./camera-focus')
-
-const {
-  imageIdentificationPipelineModule,
-} = require('./image-identification-pipeline')
+const {imageIdentificationPipelineModule} = require('./image-identification-pipeline')
 
 const MAGIC_CDN_BASE = 'https://d1y2o0xoe5yirl.cloudfront.net'
 
-const isAbsoluteUrl = value => /^https?:\/\//i.test(value || '')
-
-const joinUrl = (base, value) => {
-  if (!value) return ''
-  if (isAbsoluteUrl(value)) return value
-  return `${String(base).replace(/\/$/, '')}/${String(value).replace(/^\//, '')}`
-}
-
-const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
-
-const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
-const SHAPE_VIDEO_SCALE = getShapeVideoScale(new URLSearchParams(window.location.search).get('shapeScale'))
-const TARGET_LOST_GRACE_MS = 2500
-const SCAN_STATUS_SEARCHING = 'Searching image...'
-const SCAN_STATUS_LOADING_MAGIC = 'Loading magic...'
-
-const getTargetSize = imageUrl => new Promise((resolve) => {
-  const image = new Image()
-
-  image.onload = () => {
-    const aspect = image.naturalWidth / image.naturalHeight
-    if (!Number.isFinite(aspect) || aspect <= 0) {
-      resolve(DEFAULT_TARGET_SIZE)
-      return
-    }
-
-    // Approximate local dimensions until XR8 reports the target geometry.
-    resolve({width: Math.min(aspect, 1), height: Math.min(1 / aspect, 1)})
-  }
-  image.onerror = () => resolve(DEFAULT_TARGET_SIZE)
-  image.src = imageUrl
-})
-
-const getSafeTargetSize = (targetSize = DEFAULT_TARGET_SIZE) => (
-  targetSize &&
-    Number.isFinite(targetSize.width) &&
-    Number.isFinite(targetSize.height) &&
-    targetSize.width > 0 &&
-    targetSize.height > 0
-    ? targetSize
-    : DEFAULT_TARGET_SIZE
-)
-
-const getCoverTextureTransform = (sourceAspect, targetAspect) => {
-  if (!Number.isFinite(sourceAspect) || !Number.isFinite(targetAspect)) {
-    return {repeatX: 1, repeatY: 1, offsetX: 0, offsetY: 0}
-  }
-  if (sourceAspect <= 0 || targetAspect <= 0) {
-    return {repeatX: 1, repeatY: 1, offsetX: 0, offsetY: 0}
-  }
-
-  if (sourceAspect > targetAspect) {
-    const repeatX = targetAspect / sourceAspect
-    return {
-      repeatX,
-      repeatY: 1,
-      offsetX: (1 - repeatX) / 2,
-      offsetY: 0,
-    }
-  }
-
-  if (sourceAspect < targetAspect) {
-    const repeatY = sourceAspect / targetAspect
-    return {
-      repeatX: 1,
-      repeatY,
-      offsetX: 0,
-      offsetY: (1 - repeatY) / 2,
-    }
-  }
-
-  return {repeatX: 1, repeatY: 1, offsetX: 0, offsetY: 0}
-}
-
-const registerMagicTargetVideoCover = () => {
-  if (!window.AFRAME || window.AFRAME.components['magic-target-video-cover']) return
-
-  window.AFRAME.registerComponent('magic-target-video-cover', {
-    schema: {
-      video: {type: 'selector'},
-      width: {type: 'number', default: 1},
-      height: {type: 'number', default: 1},
-      maskUrl: {type: 'string', default: ''},
-      maskMode: {type: 'string', default: 'auto'},
-      maskAspect: {type: 'number', default: 1},
-      shape: {type: 'string', default: ''},
-    },
-
-    init() {
-      this.videoTexture = null
-      this.material = null
-      this.mesh = null
-      this.maskTexture = null
-      this.maskRequest = 0
-      this.onMetadata = this.updateTextureCover.bind(this)
-    },
-
-    update(oldData = {}) {
-      const THREE = window.AFRAME.THREE
-      const video = this.data.video
-      if (!THREE || !video) return
-
-      if (!this.videoTexture || this.videoTexture.image !== video) {
-        oldData.video?.removeEventListener('loadedmetadata', this.onMetadata)
-        oldData.video?.removeEventListener('resize', this.onMetadata)
-        this.videoTexture?.dispose?.()
-        this.videoTexture = new THREE.VideoTexture(video)
-        this.videoTexture.minFilter = THREE.LinearFilter
-        this.videoTexture.magFilter = THREE.LinearFilter
-        this.videoTexture.format = THREE.RGBAFormat
-        this.videoTexture.generateMipmaps = false
-        if ('colorSpace' in this.videoTexture && THREE.SRGBColorSpace) {
-          this.videoTexture.colorSpace = THREE.SRGBColorSpace
-        } else if ('encoding' in this.videoTexture && THREE.sRGBEncoding) {
-          this.videoTexture.encoding = THREE.sRGBEncoding
-        }
-      }
-
-      if (!this.material) {
-        this.material = new THREE.MeshBasicMaterial({
-          map: this.videoTexture,
-          side: THREE.DoubleSide,
-          transparent: true,
-          alphaTest: 0.01,
-        })
-      } else {
-        this.material.map = this.videoTexture
-        this.material.needsUpdate = true
-      }
-
-      const {width, height} = getVideoSurfaceSize(this.data, this.data.width, this.data.height)
-      const geometry = new THREE.PlaneGeometry(width, height)
-      if (!this.mesh) {
-        this.mesh = new THREE.Mesh(geometry, this.material)
-        this.el.setObject3D('mesh', this.mesh)
-      } else {
-        this.mesh.geometry?.dispose?.()
-        this.mesh.geometry = geometry
-      }
-
-      video.removeEventListener('loadedmetadata', this.onMetadata)
-      video.addEventListener('loadedmetadata', this.onMetadata)
-      // Recalculate if the decoded dimensions change after metadata (for
-      // example, when switching from a landscape source to a portrait one).
-      video.removeEventListener('resize', this.onMetadata)
-      video.addEventListener('resize', this.onMetadata)
-      this.updateTextureCover()
-      if (['maskUrl', 'maskMode', 'shape', 'width', 'height'].some(key => oldData[key] !== this.data[key])) {
-        this.updateMask()
-      }
-    },
-
-    updateMask() {
-      const THREE = window.AFRAME.THREE
-      const request = ++this.maskRequest
-      this.maskTexture?.dispose?.()
-      this.maskTexture = null
-      this.material.alphaMap = null
-      const hasMask = this.data.maskUrl || this.data.shape
-      this.material.opacity = hasMask ? 0 : 1
-      this.material.needsUpdate = true
-      if (!hasMask) return
-
-      prepareVideoMask(this.data).then((canvas) => {
-        if (request !== this.maskRequest) return
-        this.maskTexture = new THREE.CanvasTexture(canvas)
-        this.maskTexture.minFilter = THREE.LinearFilter
-        this.maskTexture.magFilter = THREE.LinearFilter
-        this.maskTexture.generateMipmaps = false
-        this.material.alphaMap = this.maskTexture
-        this.material.opacity = 1
-        this.material.needsUpdate = true
-      }).catch((error) => {
-        if (request !== this.maskRequest) return
-        console.error('[magic] Could not load video mask:', error)
-        this.el.emit('magicvideomaskerror', {error})
-      })
-    },
-
-    updateTextureCover() {
-      const video = this.data.video
-      if (!video?.videoWidth || !video?.videoHeight || !this.videoTexture) return
-
-      const sourceAspect = video.videoWidth / video.videoHeight
-      const {width, height} = getVideoSurfaceSize(this.data, this.data.width, this.data.height)
-      const targetAspect = width / height
-      const {repeatX, repeatY, offsetX, offsetY} = getCoverTextureTransform(sourceAspect, targetAspect)
-      this.videoTexture.repeat.set(repeatX, repeatY)
-      this.videoTexture.offset.set(offsetX, offsetY)
-      this.videoTexture.needsUpdate = true
-    },
-
-    remove() {
-      this.maskRequest += 1
-      this.data.video?.removeEventListener('loadedmetadata', this.onMetadata)
-      this.data.video?.removeEventListener('resize', this.onMetadata)
-      this.el.removeObject3D('mesh')
-      this.mesh?.geometry?.dispose?.()
-      this.material?.dispose?.()
-      this.videoTexture?.dispose?.()
-      this.maskTexture?.dispose?.()
-    },
-  })
-}
-
-const bindImageTargetName = (target, targetName) => {
-  if (!target) return
-  if (target.dataset.magicTargetName === targetName) return
-
-  // XR Extras captures the target name in init() and does not react to later updates.
-  // Recreate the component so a dynamically loaded target is actually tracked/rendered.
-  target.setAttribute('name', targetName)
-  target.removeAttribute('xrextras-named-image-target')
-  target.setAttribute('xrextras-named-image-target', {name: targetName})
-  target.dataset.magicTargetName = targetName
-}
-
-const loadImageTarget = (entry) => {
-  const assetRoot = joinUrl(MAGIC_CDN_BASE, entry.path || '')
-  const targetName = normalizeTargetName(entry.targetName)
-  const targetJsonUrl = joinUrl(assetRoot, `${targetName}.json`)
-
-  return fetch(targetJsonUrl)
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(`Target JSON failed to load (${response.status}): ${targetJsonUrl}`)
-      }
-      return response.json()
-    })
-    .then((targetData) => {
-      targetData.name = targetName
-      targetData.imagePath = joinUrl(assetRoot, `${targetName}_luminance.jpg`)
-      targetData.resources = Object.assign({}, targetData.resources || {}, {
-        originalImage: joinUrl(assetRoot, `${targetName}_original.jpg`),
-        croppedImage: joinUrl(assetRoot, `${targetName}_cropped.jpg`),
-        thumbnailImage: joinUrl(assetRoot, `${targetName}_thumbnail.jpg`),
-        luminanceImage: joinUrl(assetRoot, `${targetName}_luminance.jpg`),
-      })
-
-      const maskConfig = getVideoMaskConfig(entry, value => joinUrl(MAGIC_CDN_BASE, value))
-      // Recognition luminance images may be resized to 480x640. Use the
-      // actual tracking crop for the initial aspect, not that raster size.
-      return getTargetSize(targetData.resources.croppedImage).then((targetSize) => {
-        // Validate/download masks before activating a matched experience.
-        return prepareVideoMaskConfig(maskConfig).then(preparedConfig => ({
-          targetData,
-          targetName,
-          targetSize,
-          maskConfig: preparedConfig,
-          videoUrl: joinUrl(MAGIC_CDN_BASE, entry.videoUrl),
-        }))
-      })
-    })
-}
+const getVideoUrl = value => /^https?:\/\//i.test(value)
+  ? value
+  : `${MAGIC_CDN_BASE}/${String(value).replace(/^\//, '')}`
 
 const onxrloaded = () => {
   XR8.addCameraPipelineModule(cameraFocusPipelineModule({
     debug: new URLSearchParams(window.location.search).get('cameraDebug') === '1',
   }))
   XR8.addCameraPipelineModule(imageIdentificationPipelineModule())
-
-  XR8.XrController.configure({
-    imageTargetData: [],
-  })
+  // The camera is used only to identify the gift; playback needs no AR targets.
+  XR8.XrController.configure({imageTargetData: []})
 }
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
 
 document.addEventListener('DOMContentLoaded', () => {
-  registerMagicTargetVideoCover()
-
   const scene = document.querySelector('a-scene')
   const video = document.querySelector('#magic-video')
+  const player = document.querySelector('#videoPlayer')
   const appLoader = document.querySelector('#customLoader')
   const scanOverlay = document.querySelector('#scanOverlay')
   const scanStatusText = document.querySelector('#scanStatusText')
@@ -293,465 +34,165 @@ document.addEventListener('DOMContentLoaded', () => {
   const tryAgainButton = document.querySelector('#identificationTryAgain')
   const exitButton = document.querySelector('#identificationExit')
   const soundToggle = document.querySelector('#soundToggle')
+  const fullscreenToggle = document.querySelector('#fullscreenToggle')
+  const videoMessage = document.querySelector('#videoMessage')
+  const videoMessageText = document.querySelector('#videoMessageText')
+  const scanAgainButton = document.querySelector('#videoScanAgain')
 
-  if (!scene || !video || !appLoader || !videoLoader || !videoLoaderText) {
-    return
-  }
+  if (!scene || !video || !player || !appLoader || !videoLoader || !videoLoaderText) return
 
-  const targetExperiences = new Map()
-  let activeMatchSignature = ''
-  let playingTargetName = ''
-  let applyingMatch = false
-  let videoTransitioning = false
-  let identificationRestartTimer = null
-  let targetLostTimer = null
+  let hasActiveVideo = false
+  let playbackRequest = 0
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 
+  const hideAppLoader = () => appLoader.classList.add('is-hidden')
   const updateSoundButton = () => {
     soundToggle?.classList.toggle('is-muted', video.muted)
     soundToggle?.setAttribute('aria-pressed', String(video.muted))
     soundToggle?.setAttribute('aria-label', video.muted ? 'Unmute video' : 'Mute video')
   }
-
-  const hideAppLoader = () => {
-    appLoader.classList.add('is-hidden')
+  const hideVideoLoader = () => {
+    videoLoader.classList.remove('is-visible')
+    videoLoader.setAttribute('aria-hidden', 'true')
   }
-
-  const setScanStatus = (message) => {
-    if (scanStatusText) scanStatusText.textContent = message
-  }
-
-  const setAllLoadingPanelsVisible = (visible) => {
-    targetExperiences.forEach(({loadingPanel}) => {
-      loadingPanel?.setAttribute('visible', visible)
-    })
-  }
-
-  const setTargetLoadingVisible = (targetName, visible, message = 'Loading video...') => {
-    const experience = targetExperiences.get(targetName)
-    if (!experience?.loadingPanel) return false
-
-    experience.loadingPanel.setAttribute('visible', visible)
-    if (experience.loadingText) {
-      experience.loadingText.setAttribute('text', 'value', message)
-    }
-    return true
-  }
-
-  const showVideoLoader = (message = 'Buffering video...', force = false) => {
-    if (!force && !playingTargetName) {
-      return
-    }
-
-    if (playingTargetName && setTargetLoadingVisible(playingTargetName, true, message)) {
-      videoLoader.classList.remove('is-visible')
-      videoLoader.setAttribute('aria-hidden', 'true')
-      return
-    }
-
+  const showVideoLoader = (message) => {
+    if (!hasActiveVideo) return
     videoLoaderText.textContent = message
     videoLoader.classList.add('is-visible')
     videoLoader.setAttribute('aria-hidden', 'false')
   }
-
-  const hideVideoLoader = () => {
-    setAllLoadingPanelsVisible(false)
-    videoLoader.classList.remove('is-visible')
-    videoLoader.setAttribute('aria-hidden', 'true')
+  const showVideoMessage = (message, allowRescan = false) => {
+    if (videoMessageText) videoMessageText.textContent = message
+    if (videoMessage) videoMessage.hidden = false
+    if (scanAgainButton) scanAgainButton.hidden = !allowRescan
   }
-
-  const setAllVideoPlanesVisible = (visible) => {
-    targetExperiences.forEach(({plane}) => {
-      plane?.setAttribute('visible', visible)
-    })
-  }
-
-  const setTargetPlaneVisible = (targetName, visible) => {
-    targetExperiences.get(targetName)?.plane?.setAttribute('visible', visible)
-  }
-
-  const applyVideoCoverToPlanes = () => {
-    targetExperiences.forEach(({plane, width, height, maskConfig}) => {
-      plane?.setAttribute('magic-target-video-cover', Object.assign({
-        video: '#magic-video',
-        width,
-        height,
-      }, maskConfig))
-    })
-  }
-
-  const updateTargetGeometry = (targetName, geometry) => {
-    const experience = targetExperiences.get(targetName)
-    const targetSize = getTrackedTargetSize(geometry)
-    if (!experience || !targetSize) return
-    const {width, height, x, y} = getTargetVideoLayout(
-      experience.maskConfig, targetSize, experience.targetProperties, SHAPE_VIDEO_SCALE)
-    if (experience.width === width && experience.height === height &&
-      experience.x === x && experience.y === y) return
-
-    experience.width = width
-    experience.height = height
-    experience.x = x
-    experience.y = y
-    experience.plane.object3D.position.x = x
-    experience.plane.object3D.position.y = y
-    experience.loadingPanel.object3D.position.x = x
-    experience.loadingPanel.object3D.position.y = y
-    experience.plane.setAttribute('magic-target-video-cover', Object.assign({
-      video: '#magic-video', width, height,
-    }, experience.maskConfig))
-    experience.loadingPanel.object3D.scale.set(
-      width / experience.loadingSize.width, height / experience.loadingSize.height, 1)
-    console.log('[magic] Video layout:', {targetName, trackedSize: targetSize,
-      crop: experience.targetProperties, video: {width, height, x, y}})
-  }
-
-  scene.addEventListener('xrimagescanning', (event) => {
-    event.detail?.imageTargets?.forEach(({name, geometry}) => updateTargetGeometry(name, geometry))
-  })
-  scene.addEventListener('xrimageupdated', (event) => {
-    updateTargetGeometry(event.detail?.name, event.detail)
-  })
-
-  const revealPlayingTarget = () => {
-    if (!playingTargetName) return
-    applyVideoCoverToPlanes()
-    videoTransitioning = false
-    setAllVideoPlanesVisible(false)
-    setAllLoadingPanelsVisible(false)
-    setTargetPlaneVisible(playingTargetName, true)
-  }
-
-  const clearVideoFrame = () => {
+  const resumeScanning = () => {
+    ++playbackRequest
+    hasActiveVideo = false
     video.pause()
     video.removeAttribute('src')
     video.load()
-  }
-
-  const cancelIdentificationRestart = () => {
-    if (identificationRestartTimer === null) return
-    window.clearTimeout(identificationRestartTimer)
-    identificationRestartTimer = null
-  }
-
-  const cancelTargetLostTimer = () => {
-    if (targetLostTimer === null) return
-    window.clearTimeout(targetLostTimer)
-    targetLostTimer = null
-  }
-
-  const restartIdentificationAfterVideo = () => {
-    cancelTargetLostTimer()
-    cancelIdentificationRestart()
-    applyingMatch = false
-    playingTargetName = ''
-    videoTransitioning = false
-    setAllVideoPlanesVisible(false)
-    setAllLoadingPanelsVisible(false)
-    setScanStatus(SCAN_STATUS_SEARCHING)
+    player.hidden = true
+    if (fullscreenToggle) fullscreenToggle.hidden = true
+    if (soundToggle) soundToggle.hidden = true
+    if (videoMessage) videoMessage.hidden = true
+    document.body.classList.remove('is-playing-video')
+    hideVideoLoader()
+    if (scanStatusText) scanStatusText.textContent = 'Searching image...'
     scanOverlay?.classList.remove('is-hidden')
-
-    identificationRestartTimer = window.setTimeout(() => {
-      identificationRestartTimer = null
-      window.dispatchEvent(new Event('imageidentificationresume'))
-      console.log('[magic] Video stopped; image identification resumed immediately.')
-    }, 0)
+    window.dispatchEvent(new Event('imageidentificationresume'))
   }
 
   scene.addEventListener('realityready', hideAppLoader, {once: true})
+  scene.addEventListener('loaded', () => window.setTimeout(hideAppLoader, 2500), {once: true})
 
-  // Avoid leaving the custom overlay above permission or runtime messages forever.
-  scene.addEventListener('loaded', () => {
-    window.setTimeout(hideAppLoader, 2500)
-  }, {once: true})
-
-  video.pause()
   video.muted = isIOS
   video.defaultMuted = isIOS
   updateSoundButton()
   hideVideoLoader()
 
-  const bindVideoEvents = (targetVideo) => {
-    targetVideo.addEventListener('loadstart', () => showVideoLoader('Loading video...'))
-    targetVideo.addEventListener('loadedmetadata', applyVideoCoverToPlanes)
-    targetVideo.addEventListener('waiting', () => showVideoLoader('Buffering video...'))
-    targetVideo.addEventListener('stalled', () => showVideoLoader('Connection is slow...'))
-    targetVideo.addEventListener('canplay', () => {
-      revealPlayingTarget()
-      hideVideoLoader()
-    })
-    targetVideo.addEventListener('playing', () => {
-      revealPlayingTarget()
-      hideVideoLoader()
-      window.dispatchEvent(new Event('imageidentificationpause'))
-      console.log('[magic] Video is playing; identification paused.')
-    })
-    targetVideo.addEventListener('pause', () => {
-      if (!videoTransitioning) hideVideoLoader()
-    })
-    targetVideo.addEventListener('ended', restartIdentificationAfterVideo)
-    targetVideo.addEventListener('error', () => {
-      videoTransitioning = false
-      showVideoLoader('Video could not be loaded')
-    })
-  }
-
-  bindVideoEvents(video)
-
-  scene.addEventListener('magicvideomaskerror', () => {
-    showVideoLoader('Video shape could not be loaded', true)
+  video.addEventListener('volumechange', updateSoundButton)
+  video.addEventListener('loadstart', () => showVideoLoader('Loading video...'))
+  video.addEventListener('waiting', () => showVideoLoader('Buffering video...'))
+  video.addEventListener('stalled', () => showVideoLoader('Connection is slow...'))
+  video.addEventListener('canplay', hideVideoLoader)
+  video.addEventListener('playing', () => {
+    if (!hasActiveVideo) return
+    hideVideoLoader()
+    if (videoMessage) videoMessage.hidden = true
+    if (fullscreenToggle) fullscreenToggle.hidden = false
+  })
+  video.addEventListener('pause', hideVideoLoader)
+  video.addEventListener('ended', () => {
+    if (hasActiveVideo) resumeScanning()
+  })
+  video.addEventListener('error', () => {
+    if (!hasActiveVideo) return
+    hideVideoLoader()
+    showVideoMessage('Video could not be loaded. Please scan your gift again.', true)
   })
 
   soundToggle?.addEventListener('click', () => {
     video.muted = !video.muted
     updateSoundButton()
+  })
 
-    if (!video.paused) return
-    video.play().catch((error) => {
-      console.error('[magic] Video playback failed after sound change:', error)
-    })
+  fullscreenToggle?.addEventListener('click', async () => {
+    if (!hasActiveVideo) return
+    try {
+      if (video.requestFullscreen) {
+        await video.requestFullscreen()
+      } else if (video.webkitEnterFullscreen) {
+        // iPhone Safari uses the native video fullscreen API.
+        video.webkitEnterFullscreen()
+      } else if (video.webkitRequestFullscreen) {
+        await video.webkitRequestFullscreen()
+      } else {
+        showVideoMessage('Fullscreen is unavailable in this browser. You can keep watching here.')
+      }
+    } catch (error) {
+      showVideoMessage('Could not open fullscreen. Please try the fullscreen button again.')
+      console.error('[magic] Fullscreen failed:', error)
+    }
   })
 
   window.addEventListener('imageidentificationtimeout', () => {
-    setScanStatus(SCAN_STATUS_SEARCHING)
+    if (hasActiveVideo) return
     scanOverlay?.classList.add('is-hidden')
     timeoutOverlay?.classList.add('is-visible')
     timeoutOverlay?.setAttribute('aria-hidden', 'false')
     tryAgainButton?.focus()
   })
-
   tryAgainButton?.addEventListener('click', () => {
     timeoutOverlay?.classList.remove('is-visible')
     timeoutOverlay?.setAttribute('aria-hidden', 'true')
-    setScanStatus(SCAN_STATUS_SEARCHING)
-    scanOverlay?.classList.remove('is-hidden')
-    window.dispatchEvent(new Event('imageidentificationresume'))
+    resumeScanning()
   })
+  scanAgainButton?.addEventListener('click', resumeScanning)
+  exitButton?.addEventListener('click', () => window.location.assign('https://www.sisulogs.com/'))
 
-  exitButton?.addEventListener('click', () => {
-    window.location.assign('https://www.sisulogs.com/')
-  })
+  window.addEventListener('imageidentified', async (event) => {
+    if (hasActiveVideo) return
+    // Identification already chose the gift. Play its video directly, without
+    // downloading target geometry/masks or waiting for an xrimagefound event.
+    const [entry] = getMagicEntries(event.detail)
+    if (!entry) return
 
-  const clearTargetExperiences = () => {
-    cancelTargetLostTimer()
-    videoTransitioning = false
-    playingTargetName = ''
-    clearVideoFrame()
-    targetExperiences.forEach(({target}, targetName) => {
-      if (targetName === target.dataset.magicTargetName && target.id === 'magic-image-target') {
-        target.removeAttribute('xrextras-named-image-target')
-        target.removeAttribute('name')
-        delete target.dataset.magicTargetName
-      } else {
-        target.remove()
-      }
-    })
-    targetExperiences.clear()
-  }
-
-  const createTargetExperience = (match, index) => {
-    const target = index === 0
-      ? document.querySelector('#magic-image-target')
-      : document.createElement('xrextras-named-image-target')
-
-    if (!target) throw new Error('Image target container is missing.')
-
-    // The legacy fade component registers parent listeners without cleaning
-    // them up on removal. Reusing its entity lets tracking replace our masked
-    // mesh with a rectangular one. Always use a separate, clean entity.
-    target.querySelectorAll('[xrextras-target-video-fade]').forEach(legacy => legacy.remove())
-    let plane = target.querySelector('.magic-video-plane')
-
-    if (!plane) {
-      plane = document.createElement('a-entity')
-      target.appendChild(plane)
-    }
-
-    plane.classList.add('magic-video-plane')
-    plane.removeAttribute('xrextras-target-video-fade')
-    plane.removeAttribute('geometry')
-    plane.removeAttribute('material')
-    target.querySelectorAll('.magic-target-loader').forEach(loader => loader.remove())
-
-    const targetSize = getSafeTargetSize(match.targetSize)
-    const {width, height, x, y} = getTargetVideoLayout(
-      match.maskConfig, targetSize, match.targetData.properties, SHAPE_VIDEO_SCALE)
-    plane.setAttribute('position', {x, y, z: 0})
-    plane.setAttribute('magic-target-video-cover', Object.assign({
-      video: '#magic-video',
-      width,
-      height,
-    }, match.maskConfig))
-    plane.setAttribute('visible', false)
-
-    const loadingPanel = document.createElement('a-entity')
-    const loadingBackground = document.createElement('a-entity')
-    const loadingRing = document.createElement('a-ring')
-    const loadingText = document.createElement('a-entity')
-
-    loadingPanel.setAttribute('visible', false)
-    loadingPanel.setAttribute('position', {x, y, z: 0})
-    loadingPanel.classList.add('magic-target-loader')
-    loadingBackground.setAttribute('geometry', {
-      primitive: 'plane',
-      height,
-      width,
-    })
-    loadingBackground.setAttribute('material', {
-      color: '#05070c',
-      opacity: 0.78,
-      transparent: true,
-      shader: 'flat',
-    })
-    loadingBackground.setAttribute('position', '0 0 0.004')
-    loadingRing.setAttribute('radius-inner', Math.min(width, height) * 0.035)
-    loadingRing.setAttribute('radius-outer', Math.min(width, height) * 0.052)
-    loadingRing.setAttribute('theta-length', 270)
-    loadingRing.setAttribute('material', {
-      color: '#ffffff',
-      opacity: 0.95,
-      shader: 'flat',
-    })
-    loadingRing.setAttribute('position', `0 ${height * 0.11} 0.008`)
-    loadingRing.setAttribute('animation', {
-      property: 'rotation',
-      to: '0 0 360',
-      loop: true,
-      dur: 900,
-      easing: 'linear',
-    })
-    loadingText.setAttribute('text', {
-      value: 'Loading video...',
-      align: 'center',
-      anchor: 'center',
-      baseline: 'center',
-      color: '#ffffff',
-      width: Math.max(width * 1.45, 1.2),
-    })
-    loadingText.setAttribute('position', `0 ${height * -0.04} 0.009`)
-    loadingPanel.appendChild(loadingBackground)
-    loadingPanel.appendChild(loadingRing)
-    loadingPanel.appendChild(loadingText)
-    target.appendChild(loadingPanel)
-
-    if (index > 0) {
-      target.id = `magic-image-target-${index}`
-      scene.appendChild(target)
-    }
-
-    bindImageTargetName(target, match.targetName)
-    targetExperiences.set(match.targetName, {
-      target,
-      plane,
-      width,
-      height,
-      x,
-      y,
-      targetProperties: match.targetData.properties,
-      loadingPanel,
-      loadingSize: {width, height},
-      loadingText,
-      videoUrl: match.videoUrl,
-      maskConfig: match.maskConfig,
-    })
-  }
-
-  window.addEventListener('imageidentified', (event) => {
-    if (applyingMatch) return
-
-    const entries = getMagicEntries(event.detail)
-    if (!entries.length) return
-
-    const signature = entries.map((entry) => normalizeTargetName(entry.targetName)).join('|')
-    if (signature === activeMatchSignature) return
-
-    applyingMatch = true
+    hasActiveVideo = true
+    const request = ++playbackRequest
     window.dispatchEvent(new Event('imageidentificationpause'))
-    setScanStatus(SCAN_STATUS_LOADING_MAGIC)
+    hideAppLoader()
     scanOverlay?.classList.add('is-hidden')
-    showVideoLoader('Loading matched experience...', true)
+    timeoutOverlay?.classList.remove('is-visible')
+    timeoutOverlay?.setAttribute('aria-hidden', 'true')
+    document.body.classList.add('is-playing-video')
+    player.hidden = false
+    if (soundToggle) soundToggle.hidden = false
+    if (videoMessage) videoMessage.hidden = true
+    video.src = getVideoUrl(entry.videoUrl)
+    video.load()
+    showVideoLoader('Starting video...')
 
-    Promise.all(entries.map(loadImageTarget))
-      .then((matches) => {
-        clearTargetExperiences()
-        matches.forEach(createTargetExperience)
-        activeMatchSignature = signature
-
-        XR8.XrController.configure({imageTargetData: matches.map(({targetData}) => targetData)})
-        hideVideoLoader()
-        console.log('[magic] Loaded image targets:', matches.map(({targetName}) => targetName))
-      })
-      .catch((error) => {
-        applyingMatch = false
-        setScanStatus(SCAN_STATUS_SEARCHING)
-        hideVideoLoader()
-        window.dispatchEvent(new Event('imageidentificationresume'))
-        console.error('[magic] Could not load matched target:', error)
-      })
-  })
-
-  scene.addEventListener('xrimagefound', (event) => {
-    const experience = targetExperiences.get(event.detail?.name)
-    if (!experience) return
-
-    updateTargetGeometry(event.detail.name, event.detail)
-
-    cancelTargetLostTimer()
-    cancelIdentificationRestart()
-    const targetChanged = playingTargetName !== event.detail.name
-    playingTargetName = event.detail.name
-    scanOverlay?.classList.add('is-hidden')
-    video.muted = isIOS
-    updateSoundButton()
-
-    if (targetChanged || video.src !== experience.videoUrl) {
-      videoTransitioning = true
-      setAllVideoPlanesVisible(false)
-      setAllLoadingPanelsVisible(false)
-      showVideoLoader('Starting video...', true)
-      clearVideoFrame()
-      video.src = experience.videoUrl
-      video.load()
-    } else if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-      revealPlayingTarget()
-    }
-
-    if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
-      showVideoLoader('Starting video...')
-    }
-
-    console.log('[magic] Target detected:', event.detail.name, experience.videoUrl)
-    video.play().catch((error) => {
-      playingTargetName = ''
-      videoTransitioning = false
-      setAllVideoPlanesVisible(false)
-      setAllLoadingPanelsVisible(false)
+    try {
+      await video.play()
+    } catch (error) {
+      if (request !== playbackRequest) return
+      if (error.name === 'NotAllowedError' && !video.muted) {
+        // Browsers may require autoplay to begin muted until the viewer interacts.
+        video.muted = true
+        updateSoundButton()
+        try {
+          await video.play()
+          return
+        } catch (mutedError) {
+          if (request !== playbackRequest) return
+          error = mutedError
+        }
+      }
       hideVideoLoader()
+      if (!video.error) showVideoMessage('Tap the play button on the video to start watching.')
       console.error('[magic] Video playback failed:', error)
-    })
-  })
-
-  scene.addEventListener('xrimagelost', (event) => {
-    const experience = targetExperiences.get(event.detail?.name)
-    if (!experience) return
-    if (playingTargetName !== event.detail.name) return
-
-    hideVideoLoader()
-    setTargetPlaneVisible(event.detail.name, false)
-    setTargetLoadingVisible(event.detail.name, false)
-
-    cancelTargetLostTimer()
-    targetLostTimer = window.setTimeout(() => {
-      targetLostTimer = null
-
-      if (playingTargetName !== event.detail.name) return
-
-      video.pause()
-      restartIdentificationAfterVideo()
-      console.log('[magic] Image target lost long enough to pause video:', event.detail.name)
-    }, TARGET_LOST_GRACE_MS)
-
-    console.log('[magic] Image target temporarily lost:', event.detail.name)
+    }
   })
 })

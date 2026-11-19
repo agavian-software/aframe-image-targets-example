@@ -49,7 +49,8 @@ const createComponent = (config) => {
         MeshBasicMaterial: Material, Mesh},
     },
   }
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/app'), 'utf8'), {
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/video-cover'), 'utf8') + '\nregisterMagicTargetVideoCover(window)', {
+    module: {exports: {}},
     window, URLSearchParams, console,
     document: {
       addEventListener(name, callback) { if (name === 'DOMContentLoaded') callback() },

@@ -2,6 +2,62 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
+.videoPlayer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  padding: calc(max(12px, env(safe-area-inset-top)) + 62px) 16px
+    max(16px, env(safe-area-inset-bottom));
+  background: #05070c;
+}
+
+#magic-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+#magic-video:fullscreen,
+#magic-video:-webkit-full-screen {
+  padding: 0;
+  object-fit: contain;
+}
+
+.videoMessage {
+  position: absolute;
+  top: calc(max(12px, env(safe-area-inset-top)) + 76px);
+  left: 50%;
+  width: min(90%, 390px);
+  padding: 12px 18px;
+  transform: translateX(-50%);
+  color: #fff;
+  background: rgba(5, 8, 14, 0.9);
+  border-radius: 14px;
+  text-align: center;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.videoMessage p {
+  margin: 0;
+}
+
+.videoMessage button {
+  margin-top: 12px;
+}
+
+.is-playing-video .cameraFocusIndicator,
+.is-playing-video .cameraFocusHelp,
+.is-playing-video .cameraFocusDebug {
+  display: none;
+}
+
 html,
 body {
   width: 100%;
@@ -313,7 +369,8 @@ body {
 }
 
 .brandHome,
-.brandClose {
+.brandClose,
+.fullscreenToggle {
   pointer-events: auto;
   color: #fff;
   text-decoration: none;
@@ -350,6 +407,32 @@ body {
   border-radius: 50%;
 }
 
+.brandActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fullscreenToggle {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  place-items: center;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.fullscreenToggle svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .brandClose span::before,
 .brandClose span::after {
   position: absolute;
@@ -371,7 +454,8 @@ body {
 }
 
 .brandHome:focus-visible,
-.brandClose:focus-visible {
+.brandClose:focus-visible,
+.fullscreenToggle:focus-visible {
   outline: 3px solid #7fe7ff;
   outline-offset: 3px;
 }
@@ -379,7 +463,7 @@ body {
 .soundToggle {
   position: fixed;
   right: 16px;
-  bottom: max(18px, env(safe-area-inset-bottom));
+  bottom: calc(max(16px, env(safe-area-inset-bottom)) + 64px);
   z-index: 1100;
   display: grid;
   width: 48px;

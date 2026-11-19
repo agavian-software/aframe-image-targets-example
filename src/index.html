@@ -31,12 +31,20 @@
       <img src="./assets/logo.png" alt="" class="brandLogo">
       <span>Sisu Logs</span>
     </a>
-    <a class="brandClose" href="https://www.sisulogs.com/" aria-label="Close and go to Sisu Logs">
-      <span aria-hidden="true"></span>
-    </a>
+    <div class="brandActions">
+      <button id="fullscreenToggle" class="fullscreenToggle" type="button"
+        aria-label="Play video in fullscreen" title="Play video in fullscreen" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"></path>
+        </svg>
+      </button>
+      <a class="brandClose" href="https://www.sisulogs.com/" aria-label="Close and go to Sisu Logs">
+        <span aria-hidden="true"></span>
+      </a>
+    </div>
   </nav>
 
-  <button id="soundToggle" class="soundToggle" type="button" aria-label="Mute video" aria-pressed="false">
+  <button id="soundToggle" class="soundToggle" type="button" aria-label="Mute video" aria-pressed="false" hidden>
     <svg class="soundIcon soundIconOn" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 9v6h4l5 4V5L8 9H4z"></path>
       <path d="M16 8.2a5 5 0 0 1 0 7.6M18.5 5.7a8.5 8.5 0 0 1 0 12.6"></path>
@@ -76,20 +84,21 @@
     renderer="colorManagement:true"
     xrweb="allowedDevices: any; disableWorldTracking: true">
 
-    <a-assets>
-      <video id="magic-video" muted playsinline preload="metadata" crossorigin="anonymous"></video>
-    </a-assets>
-
     <a-camera position="0 4 10" raycaster="objects: .cantap" cursor="fuse: false; rayOrigin: mouse;">
     </a-camera>
 
     <a-light type="directional" intensity="0.5" position="1 1 1"></a-light>
     <a-light type="ambient" intensity="1"></a-light>
 
-    <xrextras-named-image-target id="magic-image-target" name="">
-      <a-entity class="magic-video-plane" visible="false"></a-entity>
-    </xrextras-named-image-target>
   </a-scene>
+
+  <main id="videoPlayer" class="videoPlayer" aria-label="Your gift video" hidden>
+    <video id="magic-video" controls muted playsinline preload="metadata"></video>
+    <div id="videoMessage" class="videoMessage" role="status" aria-live="polite" hidden>
+      <p id="videoMessageText"></p>
+      <button id="videoScanAgain" class="timeoutButton timeoutButtonPrimary" type="button" hidden>Scan again</button>
+    </div>
+  </main>
 
   <div id="videoLoader" class="videoLoader" role="status" aria-live="polite" aria-hidden="true">
     <span class="videoSpinner" aria-hidden="true"></span>

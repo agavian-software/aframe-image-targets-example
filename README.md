@@ -1,6 +1,17 @@
 # A-Frame: Image Targets
 
-This example uses image targets to display information about jellyfish on a flyer. It uses the xrextras-named-image-target component to connect an <a-entity> to an image target by name while the xrextras-play-video component enables video playback.
+The app scans a gift image or QR code, then plays its matched video in a normal
+webpage player. The camera pipeline is used for identification only; video playback
+does not require AR target tracking.
+
+### Webpage video playback
+
+Once identification succeeds, the first valid `videoUrlV1` entry plays directly
+with native playback controls. Portrait and landscape videos retain their full
+frame. A fullscreen button appears in the top-right navigation once playback
+starts, using the browser fullscreen API or iPhone's native video fullscreen API.
+If autoplay is blocked, playback retries muted or asks the viewer to tap Play.
+When the video finishes, scanning resumes. Video errors offer a **Scan again** button.
 
 ![Preview of the experience showing a printed flyer with a 3D jellyfish and playable video aligned to the graphics](./src/assets/screenshot-flyer.jpg)
 
@@ -65,10 +76,13 @@ the `image-identification-field` meta tag. You can also test a different endpoin
 rebuilding by opening the app with `?imageApi=https://example.com/image-identification`.
 
 Successful API results are logged as `[image-identification] Identified image response:` and are
-also emitted as an `imageidentified` event on `window`. The event is the extension point for
-loading the returned target JSON and video in the next phase.
+also emitted as an `imageidentified` event on `window`. The app plays the returned
+video directly without downloading AR target JSON or shape masks.
 
-### Video Shape Masks
+### Legacy AR mask utilities
+
+The following mask utilities are retained for reference and tests. The webpage
+player does not apply masks, shapes, or target geometry to its video.
 
 Each `videoUrlV1` entry can select a built-in shape or an uploaded image mask:
 
