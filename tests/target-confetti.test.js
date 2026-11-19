@@ -9,6 +9,7 @@ const createConfetti = () => {
   }
   class Geometry {
     constructor() { this.attributes = {} }
+    setIndex(indices) { this.index = indices }
     setAttribute(name, value) { this.attributes[name] = value }
     dispose() { this.disposed = true }
   }
@@ -20,9 +21,10 @@ const createConfetti = () => {
     components: {},
     registerComponent(name, definition) { this.components[name] = definition },
     THREE: {
-      Vector2, BufferGeometry: Geometry, ShaderMaterial: Material,
+      Vector2, InstancedBufferGeometry: Geometry, ShaderMaterial: Material, DoubleSide: 2,
       BufferAttribute: class { constructor(array, itemSize) { Object.assign(this, {array, itemSize}) } },
-      Points: class { constructor(geometry, material) { Object.assign(this, {geometry, material}) } },
+      InstancedBufferAttribute: class { constructor(array, itemSize) { Object.assign(this, {array, itemSize}) } },
+      Mesh: class { constructor(geometry, material) { Object.assign(this, {geometry, material}) } },
       Color: class { constructor() { this.r = 1; this.g = 0.5; this.b = 0.25 } },
     },
   }
@@ -44,44 +46,59 @@ const createConfetti = () => {
 test('confetti runs only for enabled, playing target video and stops during buffering', () => {
   const {component, video, emit, play} = createConfetti()
   play()
-  assert.equal(component.points.visible, false)
+  assert.equal(component.mesh.visible, false)
   component.data.enabled = true
   component.update()
-  assert.equal(component.points.visible, true)
+  assert.equal(component.mesh.visible, true)
   component.tick(100, 16)
   assert.equal(component.material.uniforms.uTime.value, 0.016)
 
   for (const event of ['waiting', 'stalled', 'error', 'abort']) {
     emit(event)
-    assert.equal(component.points.visible, false, event)
+    assert.equal(component.mesh.visible, false, event)
     component.tick(200, 16)
     assert.equal(component.material.uniforms.uTime.value, 0.016)
     play()
-    assert.equal(component.points.visible, true)
+    assert.equal(component.mesh.visible, true)
   }
   video.paused = true
   emit('pause')
-  assert.equal(component.points.visible, false)
+  assert.equal(component.mesh.visible, false)
   play()
   video.ended = true
   emit('ended')
-  assert.equal(component.points.visible, false)
+  assert.equal(component.mesh.visible, false)
   video.ended = false
   video.readyState = 2
   component.tick(300, 16)
-  assert.equal(component.points.visible, false)
+  assert.equal(component.mesh.visible, false)
   video.readyState = 4
   play()
   component.data.enabled = false
   component.update()
-  assert.equal(component.points.visible, false)
+  assert.equal(component.mesh.visible, false)
 })
 
 test('target resizes reuse GPU buffers and render resolution controls particle size', () => {
   const {component, play, objects} = createConfetti()
-  assert.equal(objects.get('confetti'), component.points)
-  assert.equal(component.geometry.attributes.position.array.length, 240 * 3)
-  assert.equal(component.geometry.attributes.aSeed.array.length, 240 * 4)
+  assert.equal(objects.get('confetti'), component.mesh)
+  assert.equal(component.geometry.instanceCount, 184)
+  assert.equal(component.geometry.attributes.aSeed.array.length, 184 * 4)
+  // A shared subdivided strip has curved silhouettes without per-piece objects.
+  assert.equal(component.geometry.attributes.position.array.length, 25 * 2 * 3)
+  assert.equal(component.geometry.index.length, 24 * 6)
+  const styles = component.geometry.attributes.aStyle.array
+  let ribbons = 0
+  let left = 0
+  let right = 0
+  for (let i = 0; i < styles.length; i += 4) {
+    ribbons += styles[i]
+    if (styles[i + 1] < 0) left++
+    else right++
+  }
+  assert.equal(ribbons, 36)
+  assert.equal(left, right)
+  assert.equal(component.material.side, 2)
   const geometry = component.geometry
   const material = component.material
   component.data.width = 2
@@ -92,10 +109,10 @@ test('target resizes reuse GPU buffers and render resolution controls particle s
   assert.equal(component.material, material)
   assert.equal(material.uniforms.uExtent.value.x, 2)
   assert.equal(material.uniforms.uExtent.value.y, 0.5)
-  component.points.onBeforeRender({getDrawingBufferSize: size => size.set(1200, 2400), getPixelRatio: () => 3})
+  component.mesh.onBeforeRender({getDrawingBufferSize: size => size.set(1200, 2400), getPixelRatio: () => 3})
   assert.equal(material.uniforms.uViewportHeight.value, 2400)
   assert.equal(material.uniforms.uPixelRatio.value, 3)
-  assert.equal(component.points.frustumCulled, false)
+  assert.equal(component.mesh.frustumCulled, false)
   assert.equal(material.depthWrite, false)
   play()
   component.tick(10000, 10000)
@@ -130,7 +147,7 @@ test('loading a new video restarts the blast but buffering preserves its progres
     emit(event)
     assert.equal(component.elapsed, 0)
     assert.equal(component.material.uniforms.uTime.value, 0)
-    assert.equal(component.points.visible, false)
+    assert.equal(component.mesh.visible, false)
     play()
     component.tick(200, 20)
     assert.equal(component.material.uniforms.uTime.value, 0.02)

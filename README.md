@@ -91,14 +91,17 @@ targets and shape masks before activating image-target playback.
 
 ### Target confetti
 
-While a video plays on a tracked image, twin confetti cannons fire colorful bursts
-from its lower sides every 4.6 seconds. Large paper flakes shoot up and outward,
-slow under air drag, then tumble down with gravity and sideways flutter. Flakes
-keep a minimum screen size for visibility on phones. The emitters follow the video
+While a video plays on a tracked image, bursts of bent paper flakes and curled red
+ribbons launch from its lower sides every 5.8 seconds. Independent launch angles,
+momentum, wind, and gravity scatter the pieces across the camera view as they fall,
+with no side boundaries. Three-dimensional strips tumble and catch highlights;
+ribbons curl along their length. No PNG textures are needed. Pieces keep a minimum
+screen size for visibility on phones. The emitters follow the video
 surface's size, crop offset, and target pose. Confetti hides during pauses, buffering,
 target loss, and webpage/fullscreen playback, then returns with target playback.
-Each target uses one GPU-animated cloud of 240 particles through A-Frame's existing
-Three.js renderer, with no extra library or image assets. Geometry, materials, and
+Each target uses one GPU-animated instanced mesh (148 paper flakes and 36 ribbons)
+through A-Frame's existing Three.js renderer, with no extra library or image assets.
+Geometry, materials, and
 media listeners are released when the target is cleared.
 
 ### Video shape masks
