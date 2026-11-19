@@ -1,4 +1,4 @@
-// Retained AR cover utility; normal webpage playback does not use this component.
+// Masked video surface used for playback on a tracked image target.
 const {getVideoSurfaceSize, prepareVideoMask} = require('./video-mask')
 
 const getCoverTextureTransform = (sourceAspect, targetAspect) => {

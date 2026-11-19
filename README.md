@@ -1,20 +1,27 @@
 # A-Frame: Image Targets
 
-The app scans a gift image or QR code, then plays its matched video in a normal
-webpage player. The camera pipeline is used for identification only; video playback
-does not require AR target tracking.
+The app scans a gift image or QR code, then plays its matched video on the tracked
+image target. The viewer can switch to normal webpage video using the top-right
+fullscreen button.
 
-### Webpage video playback
+### Image-target playback and fullscreen
 
-Once identification succeeds, the first valid `videoUrlV1` entry plays directly
-with native playback controls. Portrait and landscape videos retain their full
-frame. A fullscreen button appears in the top-right navigation once playback
-starts, using the browser fullscreen API or iPhone's native video fullscreen API.
-If autoplay is blocked, playback retries muted or asks the viewer to tap Play.
+Once identification succeeds, the app loads each `videoUrlV1` entry's target and
+mask. Video starts on the image when the tracker finds it, retaining the target's
+shape, crop alignment, and sizing. The webpage player stays hidden.
+
+Clicking the top-right fullscreen button switches the same video to a normal
+webpage player and requests browser fullscreen (or iPhone native video fullscreen).
+Playback position and sound are preserved. Webpage playback shows the full video
+frame and continues if the image target leaves view. Exiting fullscreen or choosing
+**Back to image** returns to target playback. If autoplay is blocked, playback
+retries muted or offers a **Play** button.
 Scanning stops as soon as a video is selected and stays paused during playback,
 buffering, fullscreen, and manual video pauses. Pending QR requests are cancelled
 and stale scan results are ignored.
-When the video finishes, scanning resumes. Video errors offer a **Scan again** button.
+When the video finishes, scanning resumes. In image-target mode, losing the target
+for more than 2.5 seconds also stops the video and resumes scanning. Video errors
+offer a **Scan again** button.
 
 ![Preview of the experience showing a printed flyer with a 3D jellyfish and playable video aligned to the graphics](./src/assets/screenshot-flyer.jpg)
 
@@ -79,13 +86,13 @@ the `image-identification-field` meta tag. You can also test a different endpoin
 rebuilding by opening the app with `?imageApi=https://example.com/image-identification`.
 
 Successful API results are logged as `[image-identification] Identified image response:` and are
-also emitted as an `imageidentified` event on `window`. The app plays the returned
-video directly without downloading AR target JSON or shape masks.
+also emitted as an `imageidentified` event on `window`. The app loads the returned
+targets and shape masks before activating image-target playback.
 
-### Legacy AR mask utilities
+### Video shape masks
 
-The following mask utilities are retained for reference and tests. The webpage
-player does not apply masks, shapes, or target geometry to its video.
+Masks apply to playback on the image target. The webpage player displays the
+ordinary full video frame.
 
 Each `videoUrlV1` entry can select a built-in shape or an uploaded image mask:
 

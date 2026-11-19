@@ -32,6 +32,7 @@
       <span>Sisu Logs</span>
     </a>
     <div class="brandActions">
+      <button id="videoBackToTarget" class="videoBackToTarget" type="button" hidden>Back to image</button>
       <button id="fullscreenToggle" class="fullscreenToggle" type="button"
         aria-label="Play video in fullscreen" title="Play video in fullscreen" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -90,15 +91,19 @@
     <a-light type="directional" intensity="0.5" position="1 1 1"></a-light>
     <a-light type="ambient" intensity="1"></a-light>
 
+    <xrextras-named-image-target id="magic-image-target" name="">
+      <a-entity class="magic-video-plane" visible="false"></a-entity>
+    </xrextras-named-image-target>
   </a-scene>
 
   <main id="videoPlayer" class="videoPlayer" aria-label="Your gift video" hidden>
-    <video id="magic-video" controls muted playsinline preload="metadata"></video>
-    <div id="videoMessage" class="videoMessage" role="status" aria-live="polite" hidden>
-      <p id="videoMessageText"></p>
-      <button id="videoScanAgain" class="timeoutButton timeoutButtonPrimary" type="button" hidden>Scan again</button>
-    </div>
+    <video id="magic-video" muted playsinline preload="metadata" crossorigin="anonymous"></video>
   </main>
+  <div id="videoMessage" class="videoMessage" role="status" aria-live="polite" hidden>
+    <p id="videoMessageText"></p>
+    <button id="videoPlay" class="timeoutButton timeoutButtonPrimary" type="button" hidden>Play</button>
+    <button id="videoScanAgain" class="timeoutButton timeoutButtonPrimary" type="button" hidden>Scan again</button>
+  </div>
 
   <div id="videoLoader" class="videoLoader" role="status" aria-live="polite" aria-hidden="true">
     <span class="videoSpinner" aria-hidden="true"></span>
