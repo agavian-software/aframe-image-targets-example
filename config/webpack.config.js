@@ -15,6 +15,8 @@ const makeJsLoader = () => ({
   use: {
     loader: 'babel-loader',
     options: {
+      // Keep runtime helpers as require() calls for CommonJS source files.
+      sourceType: 'unambiguous',
       presets: ['@babel/preset-env'],
       plugins: ['@babel/plugin-transform-runtime'],
     },

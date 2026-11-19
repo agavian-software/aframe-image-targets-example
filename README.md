@@ -23,6 +23,33 @@ https://8thwall.org/aframe-image-targets-example/
 5. To connect to a mobile device, follow [these instructions](https://8th.io/test-on-mobile)
 6. Recommended: Track your files using [git](https://git-scm.com/about) to avoid losing progress
 
+### Camera Focus
+
+The camera requests continuous autofocus on startup and resume when the active lens
+supports it. Tap the camera preview to request focus at that location. A white square
+marks a requested point only when the browser reports accepting its coordinates;
+it does not indicate that the image has finished focusing. Buttons and drag/pinch
+gestures are excluded. Unsupported point controls fall back to autofocus, and
+fixed-focus cameras keep their default behavior.
+
+Chrome on iPhone uses WebKit, which does not currently expose `focusMode` or
+`pointsOfInterest` controls. Native autofocus may still run, but JavaScript cannot
+force a focus sweep or reproduce the Camera app's macro lens switching. If a tap
+cannot request a focus point, the app displays guidance to move farther away;
+this is a workaround for close-focus blur, not a software autofocus fix.
+
+For device diagnosis, open the scanner URL with `?cameraDebug=1` (or append
+`&cameraDebug=1` if it already has a query). A `focus-v2` panel shows the active
+camera label, supported focus modes, reported mode, resolution, minimum focus
+distance if exposed, and the last focus request result. This checks that the
+updated bundle is deployed and distinguishes missing controls from rejected
+requests. It cannot confirm optical focus. No diagnostic data is uploaded.
+
+Support depends on the phone, lens, and browser. Test in Chrome on the actual phone:
+move a detailed object nearer and farther, tap objects at different distances,
+rotate the phone, and return after switching apps. Check that the sound/navigation
+buttons still work. Very close objects may be inside the lens's minimum focus distance.
+
 ### Image Identification API
 
 The app captures a center-cropped JPEG from the 8th Wall camera pipeline every two seconds and

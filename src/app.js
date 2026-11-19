@@ -3,6 +3,7 @@ require('./index.css')
 const {getVideoMaskConfig, getVideoSurfaceSize, prepareVideoMask, prepareVideoMaskConfig} = require('./video-mask')
 const {getMagicEntries} = require('./magic-entries')
 const {getShapeVideoScale, getTrackedTargetSize, getTargetVideoLayout} = require('./target-size')
+const {cameraFocusPipelineModule} = require('./camera-focus')
 
 const {
   imageIdentificationPipelineModule,
@@ -266,6 +267,9 @@ const loadImageTarget = (entry) => {
 }
 
 const onxrloaded = () => {
+  XR8.addCameraPipelineModule(cameraFocusPipelineModule({
+    debug: new URLSearchParams(window.location.search).get('cameraDebug') === '1',
+  }))
   XR8.addCameraPipelineModule(imageIdentificationPipelineModule())
 
   XR8.XrController.configure({
