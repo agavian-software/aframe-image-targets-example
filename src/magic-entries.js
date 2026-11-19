@@ -13,7 +13,8 @@ const getMagicEntries = (response) => {
         response.maskUrl || response.customShapeUrl || responseCustom.customShapeUrl || ''
       const maskMode = item.maskMode || custom.maskMode || response.maskMode ||
         responseCustom.maskMode || 'auto'
-      return Object.assign({}, item, {shape, maskUrl, maskMode})
+      const birthdayText = item.birthdayText ?? response.birthdayText ?? 'Happy Birthday!'
+      return Object.assign({}, item, {shape, maskUrl, maskMode, birthdayText})
     })
 }
 

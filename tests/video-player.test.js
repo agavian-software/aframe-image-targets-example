@@ -329,3 +329,25 @@ test('confetti follows the active tracked target through loss, fullscreen, and r
   await app.video.emit('ended')
   assert.equal(app.plane(), null)
 })
+
+test('birthday banner is a separate target child above the video and clears with the target', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'videos/gift.mp4', birthdayText: 'Happy Birthday!\nMia'}])
+  const target = app.elements['magic-image-target']
+  const birthday = target.querySelector('.magic-birthday-banner')
+  assert.ok(birthday)
+  assert.equal(birthday.parent, target)
+  assert.equal(birthday.attributes.get('magic-birthday-banner').text, 'Happy Birthday!\nMia')
+  assert.equal(birthday.attributes.get('magic-birthday-banner').targetName, 'gift')
+  const video = app.plane().attributes.get('magic-target-video-cover')
+  const position = app.plane().attributes.get('position')
+  assert.ok(birthday.attributes.get('position').y >= position.y + video.height / 2)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  assert.ok(birthday.object3D.position.y >= app.plane().object3D.position.y +
+    app.plane().attributes.get('magic-target-video-cover').height / 2)
+  await app.elements.fullscreenToggle.emit('click')
+  assert.equal(app.video.paused, false)
+  assert.equal(app.video.playCalls, 1)
+  await app.video.emit('ended')
+  assert.equal(target.querySelector('.magic-birthday-banner'), null)
+})

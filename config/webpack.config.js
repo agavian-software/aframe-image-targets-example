@@ -84,6 +84,10 @@ const config = {
     new CopyWebpackPlugin({
       patterns: [
         {
+          from: path.join(srcPath, 'assets/birthday'),
+          to: path.join(distPath, 'assets/birthday'),
+        },
+        {
           from: path.join(rootPath, 'external'),
           to: path.join(distPath, 'external'),
           noErrorOnMissing: true,

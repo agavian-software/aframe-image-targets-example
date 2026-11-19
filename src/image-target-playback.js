@@ -2,6 +2,7 @@ const {getVideoMaskConfig, prepareVideoMaskConfig} = require('./video-mask')
 const {getShapeVideoScale, getTrackedTargetSize, getTargetVideoLayout} = require('./target-size')
 const {registerMagicTargetVideoCover} = require('./video-cover')
 const {registerMagicTargetConfetti} = require('./target-confetti')
+const {registerMagicBirthdayBanner, getBirthdayPlacement} = require('./birthday-banner')
 
 const MAGIC_CDN_BASE = 'https://d1y2o0xoe5yirl.cloudfront.net'
 
@@ -90,6 +91,7 @@ const loadImageTarget = (entry) => {
           targetSize,
           maskConfig: preparedConfig,
           videoUrl: joinUrl(MAGIC_CDN_BASE, entry.videoUrl),
+          birthdayText: entry.birthdayText || 'Happy Birthday!',
         }))
       })
     })
@@ -98,6 +100,7 @@ const loadImageTarget = (entry) => {
 const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
   registerMagicTargetVideoCover(window)
   registerMagicTargetConfetti(window)
+  registerMagicBirthdayBanner(window)
   const targetExperiences = new Map()
   let loadGeneration = 0
 
@@ -114,7 +117,7 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
         target.removeAttribute('xrextras-named-image-target')
         target.removeAttribute('name')
         delete target.dataset.magicTargetName
-        target.querySelectorAll('.magic-video-plane, .magic-target-loader').forEach(el => el.remove())
+        target.querySelectorAll('.magic-video-plane, .magic-target-loader, .magic-birthday-banner').forEach(el => el.remove())
       } else {
         target.remove()
       }
@@ -159,6 +162,18 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       video: '#magic-video', width, height, enabled: false,
     })
     plane.setAttribute('visible', false)
+
+    target.querySelectorAll('.magic-birthday-banner').forEach(el => el.remove())
+    const birthday = document.createElement('a-entity')
+    birthday.classList.add('magic-birthday-banner')
+    const birthdayPlacement = getBirthdayPlacement(targetSize, match.targetData.properties, {width, height, x, y})
+    birthday.setAttribute('position', {x: birthdayPlacement.x, y: birthdayPlacement.y, z: 0.018})
+    birthday.setAttribute('magic-birthday-banner', {
+      targetName: match.targetName,
+      width: birthdayPlacement.width,
+      text: match.birthdayText,
+    })
+    target.appendChild(birthday)
 
     const loadingPanel = document.createElement('a-entity')
     const loadingBackground = document.createElement('a-entity')
@@ -221,6 +236,7 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       tracked: false,
       target,
       plane,
+      birthday,
       width,
       height,
       x,
@@ -255,6 +271,10 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       video: '#magic-video', width, height,
     }, experience.maskConfig))
     experience.plane.setAttribute('magic-target-confetti', {video: '#magic-video', width, height})
+    const birthdayPlacement = getBirthdayPlacement(targetSize, experience.targetProperties, {width, height, x, y})
+    experience.birthday.object3D.position.x = birthdayPlacement.x
+    experience.birthday.object3D.position.y = birthdayPlacement.y
+    experience.birthday.setAttribute('magic-birthday-banner', 'width', birthdayPlacement.width)
     experience.loadingPanel.object3D.scale.set(
       width / experience.loadingSize.width, height / experience.loadingSize.height, 1)
     console.log('[magic] Video layout:', {targetName, trackedSize: targetSize,

@@ -89,6 +89,26 @@ Successful API results are logged as `[image-identification] Identified image re
 also emitted as an `imageidentified` event on `window`. The app loads the returned
 targets and shape masks before activating image-target playback.
 
+### Flying birthday banner
+
+Each tracked image also has a separate Three.js birthday decoration. Two babies
+and four shoulder-hinged wings carry a cream and gold banner above the picture.
+The group rises from behind the top edge in 1.7 seconds, then floats gently while
+the wings flap. Target-local clipping keeps the entrance clear of the video.
+Tracking loss immediately hides and resets the decoration; reacquisition replays
+the entrance. Video controls, playback, and tracking use their existing flow.
+
+Set `birthdayText` on a `videoUrlV1` entry or its response, for example
+`"birthdayText": "Happy Birthday!\nAarav"`. It defaults to `Happy Birthday!`.
+The transparent CanvasTexture wraps and scales the message to fit the banner.
+At runtime, change the decoration entity's `magic-birthday-banner` `text` property
+to update it without rebuilding textures or restarting the animation.
+
+The seven original PNGs are in `src/assets/birthday/` and retain their exact
+filenames and proportions. Webpack copies them to `dist/assets/birthday/`.
+Live targets share the PNG textures; geometry, materials, canvas textures, and
+event listeners are released when their decoration is removed.
+
 ### Target confetti
 
 While a video plays on a tracked image, bursts of bent paper flakes and curled red
