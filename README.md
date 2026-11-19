@@ -91,11 +91,13 @@ targets and shape masks before activating image-target playback.
 
 ### Target confetti
 
-While a video plays on a tracked image, a Three.js particle system streams colorful,
-tumbling confetti around its edges. It follows the video surface's size, crop offset,
-and target pose, keeping the center clear. Confetti hides during pauses, buffering,
+While a video plays on a tracked image, twin confetti cannons fire colorful bursts
+from its lower sides every 4.6 seconds. Large paper flakes shoot up and outward,
+slow under air drag, then tumble down with gravity and sideways flutter. Flakes
+keep a minimum screen size for visibility on phones. The emitters follow the video
+surface's size, crop offset, and target pose. Confetti hides during pauses, buffering,
 target loss, and webpage/fullscreen playback, then returns with target playback.
-Each target uses one GPU-animated cloud of 180 particles through A-Frame's existing
+Each target uses one GPU-animated cloud of 240 particles through A-Frame's existing
 Three.js renderer, with no extra library or image assets. Geometry, materials, and
 media listeners are released when the target is cleared.
 

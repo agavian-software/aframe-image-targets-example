@@ -1,5 +1,5 @@
 // Reuse A-Frame's Three.js renderer: one GPU-animated point cloud per target.
-const PARTICLE_COUNT = 180
+const PARTICLE_COUNT = 240
 const COLORS = ['#ff5478', '#ffd166', '#56e0cf', '#7aa7ff', '#bc83ff', '#ffffff']
 const STOP_EVENTS = ['waiting', 'stalled', 'loadstart', 'emptied', 'error', 'abort']
 
@@ -9,30 +9,45 @@ const vertexShader = `
   uniform float uTime;
   uniform vec2 uExtent;
   uniform float uViewportHeight;
+  uniform float uPixelRatio;
   varying vec3 vColor;
   varying float vSpin;
   varying float vFlutter;
+  varying float vAlpha;
 
   void main() {
     float unit = min(uExtent.x, uExtent.y);
-    float angle = aSeed.x * 6.2831853 - uTime * (0.28 + aSeed.y * 0.32);
-    vec2 direction = vec2(cos(angle), sin(angle));
-    // Intersect a ray with the target rectangle, then add a flowing outer band.
-    // This keeps the center clear, including on very wide or tall targets.
-    vec2 halfExtent = uExtent * 0.5;
-    vec2 edge = halfExtent / max(abs(direction), vec2(0.0001));
-    float margin = unit * (0.08 + aSeed.z * 0.24
-      + 0.025 * sin(uTime * 1.8 + aSeed.x * 30.0));
-    vec2 orbit = direction * (min(edge.x, edge.y) + margin);
-    float depth = unit * (0.035 + 0.08 * (0.5 + 0.5 * sin(angle * 2.0 + aSeed.w * 20.0)));
-    vec4 viewPosition = modelViewMatrix * vec4(orbit, depth, 1.0);
+    // Twin confetti cannons fire in short bursts, with a pause between volleys.
+    float delay = aSeed.z * 0.28;
+    float age = mod(max(0.0, uTime - delay), 4.6);
+    float lifetime = 3.4 + aSeed.w * 0.6;
+    float side = aSeed.x < 0.5 ? -1.0 : 1.0;
+    float spread = fract(aSeed.x * 31.7);
+    vec3 origin = vec3(side * uExtent.x * 0.48, -uExtent.y * 0.32, unit * 0.06);
+    vec3 velocity = vec3(side * (0.10 + spread * 0.65),
+      1.9 + aSeed.y * 1.3, (aSeed.z - 0.3) * 0.22);
+
+    // Air drag slows the initial blast. Individual flakes then settle under
+    // gravity, with small sideways flutter instead of a shared circular path.
+    float drag = 1.1 + aSeed.z * 0.45;
+    float travel = (1.0 - exp(-drag * age)) / drag;
+    float flutter = smoothstep(0.0, 0.5, age);
+    vec3 offset = velocity * travel;
+    offset.x += sin(age * (3.0 + aSeed.y * 3.0) + aSeed.w * 30.0) * 0.07 * flutter;
+    offset.z += sin(age * 2.3 + aSeed.x * 20.0) * 0.035 * flutter;
+    vec4 viewPosition = modelViewMatrix * vec4(origin + offset * unit, 1.0);
+    // Fall towards the bottom of the camera view even if the target is tilted.
+    float targetScale = length(modelViewMatrix[1].xyz);
+    viewPosition.y -= unit * targetScale * (1.7 / drag) * (age - travel);
     gl_Position = projectionMatrix * viewPosition;
-    float size = unit * (0.018 + aSeed.w * 0.014);
+    float size = unit * (0.065 + aSeed.w * 0.045);
     gl_PointSize = clamp(size * projectionMatrix[1][1] * uViewportHeight
-      * 0.5 / max(0.01, -viewPosition.z), 1.0, 48.0);
+      * targetScale * 0.5 / max(0.01, -viewPosition.z), 14.0 * uPixelRatio, 56.0 * uPixelRatio);
     vColor = aColor;
-    vSpin = aSeed.x * 20.0 + uTime * (1.0 + aSeed.w * 3.0);
-    vFlutter = 0.28 + 0.72 * abs(sin(uTime * (2.0 + aSeed.y * 3.0) + aSeed.z * 40.0));
+    vSpin = aSeed.x * 20.0 + age * (2.0 + aSeed.w * 5.0);
+    vFlutter = 0.45 + 0.55 * abs(sin(age * (2.0 + aSeed.y * 3.0) + aSeed.z * 40.0));
+    vAlpha = step(delay, uTime) * smoothstep(0.0, 0.07, age)
+      * (1.0 - smoothstep(lifetime - 0.6, lifetime, age));
   }
 `
 
@@ -40,6 +55,7 @@ const fragmentShader = `
   varying vec3 vColor;
   varying float vSpin;
   varying float vFlutter;
+  varying float vAlpha;
 
   void main() {
     vec2 point = gl_PointCoord - 0.5;
@@ -47,11 +63,12 @@ const fragmentShader = `
     float s = sin(vSpin);
     point = mat2(c, -s, s, c) * point;
     // Rectangular paper flakes with soft edges and a tumbling silhouette.
-    vec2 bounds = vec2(0.29 * vFlutter, 0.39);
-    vec2 edge = smoothstep(bounds - vec2(0.045), bounds, abs(point));
-    float alpha = (1.0 - max(edge.x, edge.y)) * 0.95;
+    vec2 bounds = vec2(0.34 * vFlutter, 0.39);
+    vec2 edge = smoothstep(bounds - vec2(0.025), bounds, abs(point));
+    float alpha = (1.0 - max(edge.x, edge.y)) * vAlpha;
     if (alpha < 0.02) discard;
-    gl_FragColor = vec4(vColor * (0.8 + 0.2 * vFlutter), alpha);
+    gl_FragColor = vec4(vColor * (0.9 + 0.1 * vFlutter), alpha);
+    #include <colorspace_fragment>
   }
 `
 
@@ -73,14 +90,21 @@ const registerMagicTargetConfetti = (window) => {
       this.buffering = false
       this.viewport = new THREE.Vector2()
       this.onPlaying = () => { this.buffering = false; this.syncVisibility() }
-      this.onStopped = () => { this.buffering = true; this.syncVisibility() }
+      this.onStopped = (event) => {
+        this.buffering = true
+        if (event.type === 'loadstart' || event.type === 'emptied') {
+          this.elapsed = 0
+          this.material.uniforms.uTime.value = 0
+        }
+        this.syncVisibility()
+      }
       this.onPlaybackChange = () => this.syncVisibility()
 
       const seeds = new Float32Array(PARTICLE_COUNT * 4)
       const colors = new Float32Array(PARTICLE_COUNT * 3)
       const palette = COLORS.map(color => new THREE.Color(color))
       for (let i = 0; i < PARTICLE_COUNT; i++) {
-        // Stratified phases keep confetti spread around the entire perimeter.
+        // Split the flakes between the two cannons; vary speed, delay, and size.
         seeds.set([(i + Math.random()) / PARTICLE_COUNT, Math.random(), Math.random(), Math.random()], i * 4)
         const color = palette[i % palette.length]
         colors.set([color.r, color.g, color.b], i * 3)
@@ -95,6 +119,7 @@ const registerMagicTargetConfetti = (window) => {
           uTime: {value: 0},
           uExtent: {value: new THREE.Vector2(1, 1)},
           uViewportHeight: {value: 1},
+          uPixelRatio: {value: 1},
         },
         vertexShader,
         fragmentShader,
@@ -109,6 +134,7 @@ const registerMagicTargetConfetti = (window) => {
       this.points.onBeforeRender = (renderer) => {
         renderer.getDrawingBufferSize(this.viewport)
         this.material.uniforms.uViewportHeight.value = this.viewport.y
+        this.material.uniforms.uPixelRatio.value = renderer.getPixelRatio()
       }
       this.el.setObject3D('confetti', this.points)
     },

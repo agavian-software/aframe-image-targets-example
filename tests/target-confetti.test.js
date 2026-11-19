@@ -51,7 +51,7 @@ test('confetti runs only for enabled, playing target video and stops during buff
   component.tick(100, 16)
   assert.equal(component.material.uniforms.uTime.value, 0.016)
 
-  for (const event of ['waiting', 'stalled', 'loadstart', 'emptied', 'error', 'abort']) {
+  for (const event of ['waiting', 'stalled', 'error', 'abort']) {
     emit(event)
     assert.equal(component.points.visible, false, event)
     component.tick(200, 16)
@@ -80,8 +80,8 @@ test('confetti runs only for enabled, playing target video and stops during buff
 test('target resizes reuse GPU buffers and render resolution controls particle size', () => {
   const {component, play, objects} = createConfetti()
   assert.equal(objects.get('confetti'), component.points)
-  assert.equal(component.geometry.attributes.position.array.length, 180 * 3)
-  assert.equal(component.geometry.attributes.aSeed.array.length, 180 * 4)
+  assert.equal(component.geometry.attributes.position.array.length, 240 * 3)
+  assert.equal(component.geometry.attributes.aSeed.array.length, 240 * 4)
   const geometry = component.geometry
   const material = component.material
   component.data.width = 2
@@ -92,8 +92,9 @@ test('target resizes reuse GPU buffers and render resolution controls particle s
   assert.equal(component.material, material)
   assert.equal(material.uniforms.uExtent.value.x, 2)
   assert.equal(material.uniforms.uExtent.value.y, 0.5)
-  component.points.onBeforeRender({getDrawingBufferSize: size => size.set(1200, 2400)})
+  component.points.onBeforeRender({getDrawingBufferSize: size => size.set(1200, 2400), getPixelRatio: () => 3})
   assert.equal(material.uniforms.uViewportHeight.value, 2400)
+  assert.equal(material.uniforms.uPixelRatio.value, 3)
   assert.equal(component.points.frustumCulled, false)
   assert.equal(material.depthWrite, false)
   play()
@@ -115,4 +116,23 @@ test('clearing a target disposes GPU resources and detaches media listeners', ()
     video.dispatchEvent(new Event(event))
   }
   assert.equal(calls, 0)
+})
+
+test('loading a new video restarts the blast but buffering preserves its progress', () => {
+  const {component, emit, play} = createConfetti()
+  component.data.enabled = true
+  play()
+  component.tick(100, 40)
+  emit('waiting')
+  play()
+  assert.equal(component.material.uniforms.uTime.value, 0.04)
+  for (const event of ['loadstart', 'emptied']) {
+    emit(event)
+    assert.equal(component.elapsed, 0)
+    assert.equal(component.material.uniforms.uTime.value, 0)
+    assert.equal(component.points.visible, false)
+    play()
+    component.tick(200, 20)
+    assert.equal(component.material.uniforms.uTime.value, 0.02)
+  }
 })
