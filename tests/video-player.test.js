@@ -113,6 +113,20 @@ test('fullscreen rejection or unavailable API keeps inline playback working with
   }
 })
 
+test('scanning stays paused while playing, buffering, paused or entering fullscreen', async () => {
+  const app = createApp()
+  await app.identify()
+  const pauses = () => app.events.filter(name => name === 'imageidentificationpause').length
+  assert.equal(pauses(), 2)
+  await app.video.emit('waiting')
+  await app.video.emit('pause')
+  await app.elements.fullscreenToggle.emit('click')
+  await app.video.emit('playing')
+  assert.equal(pauses(), 3)
+  assert.equal(app.events.includes('imageidentificationresume'), false)
+  assert.equal(app.elements.scanOverlay.classList.contains('is-hidden'), true)
+})
+
 test('autoplay retries muted and offers native play when both attempts are blocked', async () => {
   const blocked = () => { const error = new Error('Autoplay blocked'); error.name = 'NotAllowedError'; throw error }
   const mutedApp = createApp({play: video => { if (!video.muted) blocked() }})

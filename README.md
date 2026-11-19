@@ -11,6 +11,9 @@ with native playback controls. Portrait and landscape videos retain their full
 frame. A fullscreen button appears in the top-right navigation once playback
 starts, using the browser fullscreen API or iPhone's native video fullscreen API.
 If autoplay is blocked, playback retries muted or asks the viewer to tap Play.
+Scanning stops as soon as a video is selected and stays paused during playback,
+buffering, fullscreen, and manual video pauses. Pending QR requests are cancelled
+and stale scan results are ignored.
 When the video finishes, scanning resumes. Video errors offer a **Scan again** button.
 
 ![Preview of the experience showing a printed flyer with a 3D jellyfish and playable video aligned to the graphics](./src/assets/screenshot-flyer.jpg)

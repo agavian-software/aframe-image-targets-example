@@ -99,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
   video.addEventListener('canplay', hideVideoLoader)
   video.addEventListener('playing', () => {
     if (!hasActiveVideo) return
+    window.dispatchEvent(new Event('imageidentificationpause'))
     hideVideoLoader()
     if (videoMessage) videoMessage.hidden = true
     if (fullscreenToggle) fullscreenToggle.hidden = false

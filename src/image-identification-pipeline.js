@@ -453,6 +453,8 @@ const imageIdentificationPipelineModule = () => {
 
   let matchFound = false
   let imageRecognitionPaused = false
+  let identificationSuspended = false
+  let scanGeneration = 0
   let identificationStartedAt = 0
   let timedOut = false
 
@@ -473,6 +475,7 @@ const imageIdentificationPipelineModule = () => {
       qrRequestController.abort()
       qrRequestController = null
     }
+    qrRequestInFlight = false
   }
 
   const clearSocketReconnectTimer = () => {
@@ -518,6 +521,7 @@ const imageIdentificationPipelineModule = () => {
   }
 
   const dispatchMatch = (payload) => {
+    if (identificationSuspended || matchFound || timedOut) return
     const response = unwrapMagicResponse(payload)
 
     if (!hasMatchedVideo(response)) {
@@ -734,6 +738,8 @@ const imageIdentificationPipelineModule = () => {
   }
 
   const timeOutIdentification = () => {
+    ++scanGeneration
+    qrDetecting = false
     timedOut = true
     matchFound = true
     closeImageSocket('TIMEOUT')
@@ -798,6 +804,7 @@ const imageIdentificationPipelineModule = () => {
     }
 
     // Lock before encoding. The backend unlocks us only by sending READY.
+    const generation = scanGeneration
     socketReadyForFrame = false
     lastFrameSentAt = now
 
@@ -809,6 +816,7 @@ const imageIdentificationPipelineModule = () => {
     )
       .then((blob) => {
         if (
+          generation !== scanGeneration ||
           matchFound ||
           timedOut ||
           imageRecognitionPaused ||
@@ -838,6 +846,7 @@ const imageIdentificationPipelineModule = () => {
         }
       })
       .catch((error) => {
+        if (generation !== scanGeneration || imageRecognitionPaused || matchFound || timedOut) return
         console.error('[image-identification] Could not prepare/send frame:', error)
         // No frame reached the server, so allow a new browser frame.
         socketReadyForFrame = true
@@ -845,7 +854,7 @@ const imageIdentificationPipelineModule = () => {
   }
 
   const identifyByCustomerCode = (customerCode = config.customerCode) => {
-    if (!customerCode || qrLookupStarted || qrRequestInFlight || matchFound) {
+    if (identificationSuspended || !customerCode || qrLookupStarted || qrRequestInFlight || matchFound || timedOut) {
       return Promise.resolve()
     }
 
@@ -855,6 +864,7 @@ const imageIdentificationPipelineModule = () => {
     closeImageSocket('QR_LOOKUP')
 
     const controller = new AbortController()
+    const generation = scanGeneration
     qrRequestController = controller
     const qrApiUrl = getQrApiUrl(config, customerCode)
 
@@ -872,6 +882,7 @@ const imageIdentificationPipelineModule = () => {
         }))
       )
       .then(({response, body}) => {
+        if (generation !== scanGeneration || identificationSuspended || controller.signal.aborted) return
         if (!response.ok) {
           console.error('[image-identification] QR API error', {
             status: response.status,
@@ -895,19 +906,25 @@ const imageIdentificationPipelineModule = () => {
         )
       })
       .catch((error) => {
+        if (generation !== scanGeneration || identificationSuspended || controller.signal.aborted) return
         if (error.name === 'AbortError') return
         matchFound = false
         console.error('[image-identification] QR request failed:', error)
       })
       .finally(() => {
-        qrRequestInFlight = false
-        if (qrRequestController === controller) qrRequestController = null
+        if (qrRequestController === controller) {
+          qrRequestInFlight = false
+          qrRequestController = null
+        }
       })
   }
 
   const identifyCurrentQr = () => {
     if (
       imageRecognitionPaused ||
+      identificationSuspended ||
+      matchFound ||
+      timedOut ||
       config.customerCode ||
       qrLookupStarted ||
       qrRequestInFlight ||
@@ -918,15 +935,18 @@ const imageIdentificationPipelineModule = () => {
     }
 
     qrDetecting = true
+    const generation = scanGeneration
+    const isCurrentScan = () => generation === scanGeneration &&
+      !identificationSuspended && !imageRecognitionPaused && !matchFound && !timedOut
 
     return ensureQrDetector()
       .then((detector) => {
-        if (!detector || qrLookupStarted || qrRequestInFlight) return null
+        if (!isCurrentScan() || !detector || qrLookupStarted || qrRequestInFlight) return null
         return detector.detect(cameraCanvas)
       })
       .then((results) => {
         const rawValue = results?.find(item => item?.rawValue)?.rawValue
-        if (!rawValue || qrLookupStarted) return
+        if (!isCurrentScan() || !rawValue || qrLookupStarted) return
 
         const parsed = parseQrLinkParams(rawValue)
         if (!parsed?.code) {
@@ -942,8 +962,11 @@ const imageIdentificationPipelineModule = () => {
         closeImageSocket('QR_DETECTED')
         return identifyByCustomerCode(parsed.code)
       })
+      .catch((error) => {
+        if (isCurrentScan()) console.warn('[image-identification] QR scan failed:', error)
+      })
       .finally(() => {
-        qrDetecting = false
+        if (generation === scanGeneration) qrDetecting = false
       })
   }
 
@@ -963,6 +986,7 @@ const imageIdentificationPipelineModule = () => {
       window.addEventListener('imageidentificationpause', pauseIdentification)
       window.addEventListener('imageidentificationresume', resumeIdentification)
 
+      if (identificationSuspended) return
       if (config.customerCode) {
         identifyByCustomerCode()
       } else {
@@ -971,6 +995,7 @@ const imageIdentificationPipelineModule = () => {
     },
 
     onUpdate: () => {
+      if (identificationSuspended) return
       const now = performance.now()
 
       if (!matchFound && now - identificationStartedAt >= config.identificationTimeoutMs) {
@@ -1008,6 +1033,8 @@ const imageIdentificationPipelineModule = () => {
     },
 
     onDetach: () => {
+      ++scanGeneration
+      identificationSuspended = true
       window.removeEventListener('imageidentificationpause', pauseIdentification)
       window.removeEventListener('imageidentificationresume', resumeIdentification)
 
@@ -1025,12 +1052,19 @@ const imageIdentificationPipelineModule = () => {
   }
 
   function pauseIdentification() {
+    ++scanGeneration
+    identificationSuspended = true
     imageRecognitionPaused = true
+    qrDetecting = false
+    clearQrRequest()
     socketReadyForFrame = false
     closeImageSocket('PAUSED')
   }
 
   function resumeIdentification() {
+    ++scanGeneration
+    identificationSuspended = false
+    qrDetecting = false
     if (config.customerCode) {
       matchFound = true
       imageRecognitionPaused = true
