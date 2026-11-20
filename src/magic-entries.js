@@ -1,4 +1,5 @@
 const {normalizeBannerDesignType} = require('./animations/banner-registry')
+const getBannerOptions = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 
 const getEffectEnabled = (value, fallback = true) => {
   if (value === undefined || value === null) return fallback
@@ -30,8 +31,9 @@ const getMagicEntries = (response) => {
       const enableBanner = getEffectEnabled(item.enableBanner ?? response.enableBanner)
       const bannerType = String(item.bannerType ?? response.bannerType ?? 0).trim()
       const bannerDesignType = normalizeBannerDesignType(item.bannerDesignType ?? response.bannerDesignType ?? 0)
+      const bannerOptions = {...getBannerOptions(response.bannerOptions), ...getBannerOptions(item.bannerOptions)}
       return Object.assign({}, item, {
-        shape, maskUrl, maskMode, enableConfetti, enableBanner, bannerType, bannerDesignType,
+        shape, maskUrl, maskMode, enableConfetti, enableBanner, bannerType, bannerDesignType, bannerOptions,
         bannerMessage: String(bannerMessage), birthdayText: String(bannerMessage),
       })
     })

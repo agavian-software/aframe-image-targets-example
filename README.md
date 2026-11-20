@@ -117,8 +117,9 @@ Disabled effects are not created and stay disabled during resizing, tracking
 reacquisition, and fullscreen transitions. Video playback continues normally.
 `bannerType` identifies one of the seven categories from `0` to `6`.
 `bannerDesignType` is a nonnegative integer selecting a design within the category
-and defaults to `0`. Category `0` / design `0` selects this flying-baby banner.
-Other pairs currently render no banner until their designs are implemented and
+and defaults to `0`. Category `0` / design `0` selects this flying-baby banner;
+category `0` / design `1` selects the magical gift box below the image.
+Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
 the banner blank.
@@ -139,6 +140,12 @@ src/animations/
   birthday-banner/
     index.js       # Component, movement, text, and asset loading
     assets/        # Seven original transparent PNGs
+  magical-gift-box/
+    index.js       # A-Frame adapter and bottom-edge placement
+    MagicalGiftBoxEffect.js # Reusable Three.js effect
+    timeline.js    # Reveal stages and particle trajectories
+    assets.js      # WebP filenames, shared loading, and disposal
+    assets/        # Eight supplied WebP images
 ```
 
 The PNGs retain their exact filenames and proportions. Webpack copies animation
@@ -168,6 +175,75 @@ pair such as `0` / `0`.
 Animation JavaScript is currently bundled together; downloading code on demand
 with dynamic imports can be added when multiple designs are available. Confetti
 remains a separate procedural effect in `src/target-confetti.js` and needs no PNGs.
+
+### Magical gift box (category 0 / design 1)
+
+Set `enableBanner: true`, `bannerType: 0`, and `bannerDesignType: 1` in the matched
+API entry. `enableBanner` remains the first check before design lookup or loading.
+The existing flying-baby animation remains available as design `0`; confetti is
+still independently controlled by `enableConfetti`.
+
+```json
+{
+  "targetName": "gift",
+  "videoUrl": "videos/gift.mp4",
+  "enableBanner": true,
+  "bannerType": 0,
+  "bannerDesignType": 1,
+  "bannerMessage": "Happy Birthday\nPriya",
+  "bannerOptions": {
+    "duration": 5,
+    "size": 1,
+    "offsetX": 0,
+    "offsetY": 0.025,
+    "sparkleColor": "#ffd36a",
+    "heartColor": "#ff64a9",
+    "textColor": "#79382f",
+    "particleCount": 64,
+    "maxTextureSize": 768
+  }
+}
+```
+
+The five-second sequence reveals a closed gift from behind the bottom edge
+(0-1.5s), pops the lid and opens the box (1.5-2.5s), transitions through golden,
+heart, and star artwork with real-time sparkles and two departing presents
+(2.5-4s), then raises the personalized banner (4-5s). The final pose floats with
+occasional sparkles. Composite illustrations crossfade as one main gift rather
+than stacking multiple complete gift boxes. A cropped and feathered portion of
+the open-gift texture supplies the final box without its explosion or spare lid.
+All eight source WebP filenames are preserved; source files are not altered.
+
+The anchor follows the tracked target and sits below both the original picture
+and the enlarged video surface, accounting for off-center tracking crops. Every
+sprite and particle is clipped at that anchor's bottom edge in target coordinates,
+including during the entrance and lid pop. No global renderer clipping is enabled.
+Transparent sprites retain their artwork aspect ratios and explicit layer order.
+The message is drawn onto a separate CanvasTexture; changing `bannerMessage` or
+the component's `text` does not reload artwork.
+
+`duration` scales the whole reveal and subsequent motion (0.5-60 seconds). `size`
+scales the effect relative to picture width (0.1-3). `offsetX` shifts horizontally
+in picture-width units; positive `offsetY` moves down, with negative values clamped
+to zero to preserve the video area. Entry `bannerOptions` merge over response
+defaults. Colors use CSS color strings. Particle count is capped at 96 (64 by
+default), rendered in one instanced draw; at most ten emit occasionally afterward.
+Artwork uses a shared, reference-counted cache and is resized on upload to at most
+768 pixels per dimension by default (configurable 256-1024 at initial load), with
+no mipmaps. Only the selected design requests its images.
+
+`MagicalGiftBoxEffect` can also be used directly with Three.js: construct it with
+`{THREE, document, parent, ...options}`, where `parent` is a tracked Object3D at the
+picture's bottom edge. Call `load()` to prepare assets, `start()` on tracking
+acquisition, `update(deltaSeconds)` each frame, and `reset()` on tracking loss.
+`configure({enabled: false})` hides and resets the effect independently; configure
+it back to enabled and call `load()` if it has not loaded yet. `configure()` also
+updates message, timing, sizing, position, colors, and particle count. `seek(seconds)`
+supports deterministic previews. `dispose()` releases geometry, materials,
+CanvasTexture, and the shared artwork reference, including pending requests. The
+A-Frame adapter handles these calls and removes tracking listeners on teardown.
+Artwork failures emit `giftboxerror` on the decoration entity and leave video
+playback running.
 
 ### Target confetti
 

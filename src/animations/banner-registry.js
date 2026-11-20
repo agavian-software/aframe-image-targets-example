@@ -10,6 +10,14 @@ const BANNER_ANIMATIONS = Object.freeze({
         return {register: registerMagicBirthdayBanner, getPlacement: getBirthdayPlacement}
       },
     }),
+    1: Object.freeze({
+      id: 'magical-gift-box',
+      component: 'magic-gift-box',
+      load: () => {
+        const {registerMagicalGiftBoxEffect, getGiftBoxPlacement, getGiftBoxOptions} = require('./magical-gift-box')
+        return {register: registerMagicalGiftBoxEffect, getPlacement: getGiftBoxPlacement, getOptions: getGiftBoxOptions}
+      },
+    }),
   }),
   1: Object.freeze({}),
   2: Object.freeze({}),

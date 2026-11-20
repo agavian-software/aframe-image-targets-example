@@ -96,6 +96,7 @@ const loadImageTarget = (entry) => {
           birthdayText: entry.bannerMessage ?? entry.birthdayText ?? 'Happy Birthday!',
           bannerType: String(entry.bannerType ?? 0),
           bannerDesignType: entry.bannerDesignType,
+          bannerOptions: entry.bannerOptions,
         }))
       })
     })
@@ -183,6 +184,7 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       const placement = bannerAnimation.getPlacement(targetSize, match.targetData.properties, {width, height, x, y})
       banner.setAttribute('position', {x: placement.x, y: placement.y, z: 0.018})
       banner.setAttribute(bannerDefinition.component, {
+        ...bannerAnimation.getOptions?.(match.bannerOptions),
         targetName: match.targetName,
         width: placement.width,
         text: match.birthdayText,

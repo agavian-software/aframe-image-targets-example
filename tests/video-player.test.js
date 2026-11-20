@@ -424,7 +424,7 @@ test('backend flags independently control decorations through resizing, tracking
 test('unmapped or invalid category/design pairs keep video playing without a banner', async () => {
   const pairs = [
     ...[1, 2, 3, 4, 5, 6, '1', '6', -1, 7, 'invalid'].map(bannerType => [bannerType, 0]),
-    ...[1, '1', 12, -1, 0.5, 'invalid', '', true].map(bannerDesignType => [0, bannerDesignType]),
+    ...[2, '2', 12, -1, 0.5, 'invalid', '', true].map(bannerDesignType => [0, bannerDesignType]),
   ]
   for (const [bannerType, bannerDesignType] of pairs) {
     const app = createApp()
@@ -441,7 +441,7 @@ test('unmapped or invalid category/design pairs keep video playing without a ban
 test('response selection defaults and entry design overrides decide each targets banner', async () => {
   const app = createApp()
   await app.window.emit('imageidentified', {
-    bannerType: 0, bannerDesignType: 1,
+    bannerType: 0, bannerDesignType: 2,
     videoUrlV1: [
       {targetName: 'gift', videoUrl: 'one.mp4'},
       {targetName: 'second', videoUrl: 'two.mp4', bannerDesignType: '0'},
@@ -472,4 +472,45 @@ test('different matched targets keep their own effects when switching videos', a
   assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, false)
   assert.equal(app.video.src.endsWith('/two.mp4'), true)
   assert.equal(app.video.playCalls, 2)
+})
+
+test('gift design stays below the image, resizes, and preserves independent video and confetti controls', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: true,
+    enableConfetti: false, bannerType: 0, bannerDesignType: 1,
+    bannerMessage: 'Happy Birthday Priya', bannerOptions: {duration: 7, size: 0.9, particleCount: 40,
+      width: 99, assetBase: 'https://untrusted.example/', targetName: 'wrong'}}])
+  const target = app.elements['magic-image-target']
+  const gift = target.querySelector('.magic-gift-box')
+  assert.ok(gift)
+  assert.equal(target.querySelector('.magic-birthday-banner'), null)
+  const options = gift.attributes.get('magic-gift-box')
+  assert.equal(options.text, 'Happy Birthday Priya')
+  assert.equal(options.targetName, 'gift')
+  assert.equal(options.duration, 7)
+  assert.equal(options.size, 0.9)
+  assert.equal(options.particleCount, 40)
+  assert.equal(options.width, 1.04)
+  assert.equal(options.assetBase, undefined)
+  const video = app.plane().attributes.get('magic-target-video-cover')
+  assert.ok(gift.attributes.get('position').y <= -video.height / 2)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  assert.equal(gift.attributes.get('magic-gift-box').width, 2.08)
+  assert.ok(gift.object3D.position.y <= -app.plane().attributes.get('magic-target-video-cover').height / 2)
+  await app.elements.fullscreenToggle.emit('click')
+  await app.elements.videoBackToTarget.emit('click')
+  assert.equal(app.video.paused, false)
+  assert.equal(app.video.playCalls, 1)
+  assert.equal(app.plane().attributes.has('magic-target-confetti'), false)
+  await app.video.emit('ended')
+  assert.equal(target.querySelector('.magic-gift-box'), null)
+})
+
+test('disabled banners do not resolve the gift design or create its entity', async () => {
+  const app = createApp({resolveBannerAnimation() { assert.fail('Banner master switch must win') }})
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: false,
+    enableConfetti: true, bannerType: 0, bannerDesignType: 1}])
+  assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
+  assert.equal(app.video.paused, false)
 })

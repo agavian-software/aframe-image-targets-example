@@ -122,3 +122,11 @@ test('entry banner text takes priority over response text and preserves blank me
     assert.equal(entry.birthdayText, bannerMessage)
   }
 })
+
+test('gift settings merge response defaults and entry overrides without changing another target', () => {
+  const entries = getMagicEntries({bannerOptions: {duration: 5, size: 1, particleCount: 64}, videoUrlV1: [
+    {...videoEntry, bannerOptions: {duration: 8}}, {...videoEntry, targetName: 'other'},
+  ]})
+  assert.deepEqual(entries[0].bannerOptions, {duration: 8, size: 1, particleCount: 64})
+  assert.deepEqual(entries[1].bannerOptions, {duration: 5, size: 1, particleCount: 64})
+})
