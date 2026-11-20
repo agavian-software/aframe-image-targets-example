@@ -98,8 +98,30 @@ the wings flap. Target-local clipping keeps the entrance clear of the video.
 Tracking loss immediately hides and resets the decoration; reacquisition replays
 the entrance. Video controls, playback, and tracking use their existing flow.
 
-Set `birthdayText` on a `videoUrlV1` entry or its response, for example
-`"birthdayText": "Happy Birthday!\nAarav"`. It defaults to `Happy Birthday!`.
+WebSocket `MATCHED` responses configure each `data.videoUrlV1[]` entry:
+
+```json
+{
+  "targetName": "gift",
+  "videoUrl": "videos/gift.mp4",
+  "enableConfetti": true,
+  "enableBanner": true,
+  "bannerMessage": "Happy Birthday!\nAarav",
+  "bannerType": 0
+}
+```
+
+`enableConfetti` and `enableBanner` independently control their effects per target.
+Disabled effects are not created and stay disabled during resizing, tracking
+reacquisition, and fullscreen transitions. Video playback continues normally.
+`bannerType: 0` selects this flying-baby banner; types `1` and `2` are reserved
+for future designs and currently render no banner. `bannerMessage` supplies the
+text, including line breaks; an empty string keeps the banner blank.
+
+For older responses, omitted flags default to enabled and an omitted type selects
+`0`. The legacy `birthdayText` field is also accepted. The message defaults to
+`Happy Birthday!` when neither message field is supplied. Entry settings override
+response defaults. Boolean flags also accept `1`/`0` and `"true"`/`"false"`.
 The transparent CanvasTexture wraps and scales the message to fit the banner.
 At runtime, change the decoration entity's `magic-birthday-banner` `text` property
 to update it without rebuilding textures or restarting the animation.

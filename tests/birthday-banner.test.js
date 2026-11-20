@@ -2,7 +2,7 @@ const {test} = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const {BIRTHDAY_FILES, getBirthdayPlacement, getBirthdayFrame, drawBirthdayText} = require('../src/birthday-banner')
+const {BIRTHDAY_FILES, getBirthdayPlacement, getBirthdayFrame, drawBirthdayText, isBirthdayBannerType} = require('../src/birthday-banner')
 const {getTargetVideoLayout} = require('../src/target-size')
 const {getMagicEntries} = require('../src/magic-entries')
 
@@ -59,6 +59,14 @@ test('transparent text is centered, wrapped, and shrunk into the banner safe are
     assert.ok(y > 0 && y < 256)
     assert.equal(maxWidth, 940)
   }
+  calls.length = 0
+  drawBirthdayText(canvas, '')
+  assert.ok(calls.filter(call => call[0] === 'text').every(call => call[1] === ''))
+})
+
+test('banner type zero uses the child design and types one and two remain reserved', () => {
+  for (const value of [0, '0', undefined, null]) assert.equal(isBirthdayBannerType(value), true)
+  for (const value of [1, 2, '1', '2']) assert.equal(isBirthdayBannerType(value), false)
 })
 
 test('birthday messages support entry overrides and response defaults', () => {

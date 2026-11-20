@@ -12,6 +12,7 @@ const BIRTHDAY_FILES = [
 const BANNER_ASPECT = 1099 / 470
 const ENTRANCE_SECONDS = 1.7
 const assetCache = new Map()
+const isBirthdayBannerType = value => String(value ?? 0).trim() === '0'
 
 const getBirthdayPlacement = (targetSize, properties, videoLayout) => {
   const picture = getTargetVideoLayout({}, targetSize, properties, 1)
@@ -81,7 +82,7 @@ const drawBirthdayText = (canvas, value) => {
   canvas.height = 256
   const ctx = canvas.getContext('2d')
   ctx.clearRect(0, 0, canvas.width, canvas.height)
-  const text = String(value || 'Happy Birthday!').slice(0, 240)
+  const text = String(value ?? 'Happy Birthday!').slice(0, 240)
   const paragraphs = text.split('\n').slice(0, 3)
   let lines = []
   let size = 88
@@ -121,6 +122,8 @@ const registerMagicBirthdayBanner = (window) => {
       targetName: {default: ''},
       width: {type: 'number', default: 1},
       text: {default: 'Happy Birthday!'},
+      // Type 0 is the flying-baby design. Types 1 and 2 are reserved.
+      bannerType: {default: '0'},
       assetBase: {default: './assets/birthday'},
     },
 
@@ -128,6 +131,7 @@ const registerMagicBirthdayBanner = (window) => {
       this.elapsed = 0
       this.tracked = false
       this.ready = false
+      this.supported = isBirthdayBannerType(this.data.bannerType)
       this.removed = false
       this.materials = []
       this.geometries = []
@@ -142,7 +146,7 @@ const registerMagicBirthdayBanner = (window) => {
         this.tracked = true
         this.elapsed = 0
         this.animate(0)
-        this.group.visible = this.ready
+        this.group.visible = this.ready && this.supported
       }
       this.onLost = (event) => {
         if (event.detail?.name !== this.data.targetName) return
@@ -156,6 +160,12 @@ const registerMagicBirthdayBanner = (window) => {
     },
 
     update(oldData = {}) {
+      this.supported = isBirthdayBannerType(this.data.bannerType)
+      if (!this.supported) {
+        this.group.visible = false
+        this.elapsed = 0
+        return
+      }
       if (oldData.targetName !== undefined && oldData.targetName !== this.data.targetName) {
         this.tracked = false
         this.group.visible = false
@@ -170,7 +180,7 @@ const registerMagicBirthdayBanner = (window) => {
           this.ready = true
           this.elapsed = 0
           this.animate(0)
-          this.group.visible = this.tracked
+          this.group.visible = this.tracked && this.supported
         }).catch((error) => {
           if (!this.removed) {
             console.error('[magic] Birthday artwork could not load:', error)
@@ -179,6 +189,7 @@ const registerMagicBirthdayBanner = (window) => {
         })
       }
       if (this.textTexture && oldData.text !== this.data.text) this.updateText()
+      this.group.visible = this.ready && this.tracked
       this.animate(0)
     },
 
@@ -289,7 +300,7 @@ const registerMagicBirthdayBanner = (window) => {
     },
 
     tick(time, delta) {
-      if (this.ready && this.tracked) this.animate(delta)
+      if (this.ready && this.tracked && this.supported) this.animate(delta)
     },
 
     remove() {
@@ -305,4 +316,4 @@ const registerMagicBirthdayBanner = (window) => {
   })
 }
 
-module.exports = {BIRTHDAY_FILES, getBirthdayPlacement, getBirthdayFrame, drawBirthdayText, registerMagicBirthdayBanner}
+module.exports = {BIRTHDAY_FILES, getBirthdayPlacement, getBirthdayFrame, drawBirthdayText, isBirthdayBannerType, registerMagicBirthdayBanner}

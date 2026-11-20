@@ -53,3 +53,48 @@ test('invalid or empty backend video entries remain ignored', () => {
     assert.deepEqual(getMagicEntries(response), [])
   }
 })
+
+test('MATCHED data preserves per-target effect settings and backend banner text', () => {
+  const entries = getMagicEntries({status: 'MATCHED', data: {
+    enableConfetti: true, enableBanner: true, bannerMessage: 'Default', bannerType: 0,
+    videoUrlV1: [
+      {...videoEntry, enableConfetti: false, enableBanner: true, bannerMessage: 'Happy Birthday!\nMia'},
+      {...videoEntry, targetName: 'second', enableConfetti: true, enableBanner: false, bannerMessage: ''},
+      {...videoEntry, targetName: 'third', enableBanner: true, bannerType: 2},
+    ],
+  }})
+  assert.equal(entries[0].enableConfetti, false)
+  assert.equal(entries[0].enableBanner, true)
+  assert.equal(entries[0].bannerMessage, 'Happy Birthday!\nMia')
+  assert.equal(entries[0].birthdayText, entries[0].bannerMessage)
+  assert.equal(entries[0].bannerType, '0')
+  assert.equal(entries[1].enableConfetti, true)
+  assert.equal(entries[1].enableBanner, false)
+  assert.equal(entries[1].birthdayText, '')
+  assert.equal(entries[2].bannerType, '2')
+})
+
+test('effect flags recognize false boolean, number, and string values without truthiness bugs', () => {
+  for (const value of [false, 0, 'false', 'FALSE', '0', ' false ', '']) {
+    const [entry] = getMagicEntries({videoUrlV1: [{...videoEntry, enableConfetti: value, enableBanner: value}]})
+    assert.equal(entry.enableConfetti, false, String(value))
+    assert.equal(entry.enableBanner, false, String(value))
+  }
+  for (const value of [true, 1, 'true', 'TRUE', '1', ' true ']) {
+    const [entry] = getMagicEntries({videoUrlV1: [{...videoEntry, enableConfetti: value, enableBanner: value}]})
+    assert.equal(entry.enableConfetti, true, String(value))
+    assert.equal(entry.enableBanner, true, String(value))
+  }
+  const [legacy] = getMagicEntries({videoUrlV1: [videoEntry]})
+  assert.equal(legacy.enableConfetti, true)
+  assert.equal(legacy.enableBanner, true)
+  assert.equal(legacy.bannerType, '0')
+})
+
+test('entry banner text takes priority over response text and preserves blank messages', () => {
+  for (const bannerMessage of ['A new message', '']) {
+    const [entry] = getMagicEntries({birthdayText: 'Old default', bannerMessage: 'New default',
+      videoUrlV1: [{...videoEntry, birthdayText: 'Old entry', bannerMessage}]})
+    assert.equal(entry.birthdayText, bannerMessage)
+  }
+})

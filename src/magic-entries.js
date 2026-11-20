@@ -1,4 +1,13 @@
+const getEffectEnabled = (value, fallback = true) => {
+  if (value === undefined || value === null) return fallback
+  if (typeof value === 'string') return ['true', '1'].includes(value.trim().toLowerCase())
+  return value === true || value === 1
+}
+
 const getMagicEntries = (response) => {
+  // The scanner normally unwraps MATCHED.data before dispatching. Also accept
+  // the original WebSocket envelope when processing a response directly.
+  response = response?.videoUrlV1 != null ? response : response?.data ?? response
   const value = response?.videoUrlV1
   return (Array.isArray(value) ? value : value ? [value] : [])
     .filter(item => item && Object(item) === item && item.targetName && item.videoUrl)
@@ -13,8 +22,15 @@ const getMagicEntries = (response) => {
         response.maskUrl || response.customShapeUrl || responseCustom.customShapeUrl || ''
       const maskMode = item.maskMode || custom.maskMode || response.maskMode ||
         responseCustom.maskMode || 'auto'
-      const birthdayText = item.birthdayText ?? response.birthdayText ?? 'Happy Birthday!'
-      return Object.assign({}, item, {shape, maskUrl, maskMode, birthdayText})
+      const bannerMessage = item.bannerMessage ?? item.birthdayText ??
+        response.bannerMessage ?? response.birthdayText ?? 'Happy Birthday!'
+      const enableConfetti = getEffectEnabled(item.enableConfetti ?? response.enableConfetti)
+      const enableBanner = getEffectEnabled(item.enableBanner ?? response.enableBanner)
+      const bannerType = String(item.bannerType ?? response.bannerType ?? 0).trim()
+      return Object.assign({}, item, {
+        shape, maskUrl, maskMode, enableConfetti, enableBanner, bannerType,
+        bannerMessage: String(bannerMessage), birthdayText: String(bannerMessage),
+      })
     })
 }
 

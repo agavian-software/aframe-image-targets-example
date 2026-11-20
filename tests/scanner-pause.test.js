@@ -181,3 +181,13 @@ test('an encoded camera frame from before playback cannot be sent into a resumed
   await flush()
   assert.equal(app.sockets[1].sent.length, 1)
 })
+
+test('WebSocket MATCHED dispatches effect flags, type, and message from data.videoUrlV1 unchanged', () => {
+  const app = createScanner()
+  const entry = {targetName: 'gift', videoUrl: 'gift.mp4', enableConfetti: false,
+    enableBanner: true, bannerMessage: 'Happy Birthday!\nMia', bannerType: 0}
+  app.sockets[0].message({status: 'MATCHED', data: {videoUrlV1: [entry]}})
+  const identified = app.events.find(event => event.type === 'imageidentified')
+  assert.ok(identified)
+  assert.deepEqual(JSON.parse(JSON.stringify(identified.detail.videoUrlV1[0])), entry)
+})

@@ -351,3 +351,65 @@ test('birthday banner is a separate target child above the video and clears with
   await app.video.emit('ended')
   assert.equal(target.querySelector('.magic-birthday-banner'), null)
 })
+
+test('backend flags independently control decorations through resizing, tracking, and fullscreen', async () => {
+  for (const enableConfetti of [false, true]) {
+    for (const enableBanner of [false, true]) {
+      const app = createApp()
+      await app.start([{targetName: 'gift', videoUrl: 'gift.mp4',
+        enableConfetti, enableBanner, bannerMessage: 'Happy Birthday!\nAarav', bannerType: 0}])
+      const target = app.elements['magic-image-target']
+      const checkEffects = () => {
+        assert.equal(app.plane().attributes.has('magic-target-confetti'), enableConfetti)
+        assert.equal(Boolean(target.querySelector('.magic-birthday-banner')), enableBanner)
+      }
+      checkEffects()
+      if (enableBanner) {
+        const banner = target.querySelector('.magic-birthday-banner').attributes.get('magic-birthday-banner')
+        assert.equal(banner.text, 'Happy Birthday!\nAarav')
+        assert.equal(banner.bannerType, '0')
+      }
+      await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+      checkEffects()
+      await app.scene.emit('xrimagelost', {name: 'gift'})
+      await app.scene.emit('xrimagefound', {name: 'gift'})
+      checkEffects()
+      if (enableConfetti) assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
+      await app.elements.fullscreenToggle.emit('click')
+      await app.elements.videoBackToTarget.emit('click')
+      checkEffects()
+      assert.equal(app.video.paused, false)
+      assert.equal(app.video.playCalls, 1)
+      await app.video.emit('ended')
+      assert.equal(target.querySelector('.magic-birthday-banner'), null)
+    }
+  }
+})
+
+test('reserved banner types do not render the child design or interfere with video playback', async () => {
+  for (const bannerType of [1, 2, '1', '2']) {
+    const app = createApp()
+    await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: true, enableConfetti: false, bannerType}])
+    assert.equal(app.elements['magic-image-target'].querySelector('.magic-birthday-banner'), null)
+    await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+    assert.equal(app.video.paused, false)
+    assert.equal(app.plane().attributes.get('visible'), true)
+    assert.equal(app.plane().attributes.has('magic-target-confetti'), false)
+  }
+})
+
+test('different matched targets keep their own effects when switching videos', async () => {
+  const app = createApp()
+  await app.start([
+    {targetName: 'gift', videoUrl: 'one.mp4', enableConfetti: true, enableBanner: false},
+    {targetName: 'second', videoUrl: 'two.mp4', enableConfetti: false, enableBanner: true, bannerMessage: 'Second gift', bannerType: 0},
+  ])
+  const second = app.scene.children.find(child => child.id === 'magic-image-target-1')
+  assert.equal(app.elements['magic-image-target'].querySelector('.magic-birthday-banner'), null)
+  assert.equal(second.querySelector('.magic-birthday-banner').attributes.get('magic-birthday-banner').text, 'Second gift')
+  await app.scene.emit('xrimagefound', {name: 'second'})
+  assert.equal(second.querySelector('.magic-video-plane').attributes.has('magic-target-confetti'), false)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, false)
+  assert.equal(app.video.src.endsWith('/two.mp4'), true)
+  assert.equal(app.video.playCalls, 2)
+})
