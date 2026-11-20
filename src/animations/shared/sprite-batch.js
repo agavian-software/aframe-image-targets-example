@@ -1,7 +1,6 @@
 const WHITE = {r: 1, g: 1, b: 1}
 
-// One draw call per texture, including all copies of each single balloon and the
-// complete dynamic letter atlas. Bounds stay in the tracked anchor's coordinates.
+// One draw call per texture. Bounds stay in the tracked anchor's coordinates.
 class SpriteBatch {
   constructor(THREE, group, texture, capacity, clip, order, additive = false) {
     const geometry = new THREE.InstancedBufferGeometry()

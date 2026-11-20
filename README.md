@@ -120,6 +120,7 @@ reacquisition, and fullscreen transitions. Video playback continues normally.
 and defaults to `0`. Category `0` / design `0` selects this flying-baby banner;
 category `0` / design `1` selects the magical gift box below the image.
 Category `0` / design `2` selects balloons carrying a personalized name.
+Category `0` / design `3` selects the fairy with a magic wand.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -151,10 +152,18 @@ src/animations/
     index.js       # A-Frame adapter and picture bounds
     BalloonNameEffect.js # Reusable Three.js effect
     timeline.js    # Entrance, staggered name, reveal, and floating
-    sprite-batch.js # Instanced sprites and video-area clipping
     text.js        # Dynamic letter atlas and message CanvasTextures
     assets.js      # Selective WebP loading and shared texture leases
     assets/        # Eight supplied WebP images
+  fairy-magic-wand/
+    index.js       # A-Frame adapter and measured picture bounds
+    FairyMagicWandEffect.js # Reusable Three.js effect
+    timeline.js    # Flight, wand tip, magic circle, and particles
+    text.js        # Dynamic ribbon CanvasTexture
+    assets.js      # Selective shared WebP texture loading
+    assets/        # Nine supplied WebP images
+  shared/
+    sprite-batch.js # Instanced sprites and video-area clipping
 ```
 
 The PNGs retain their exact filenames and proportions. Webpack copies animation
@@ -342,6 +351,96 @@ reconcile any newly required optional images. `seek(seconds)` supports previews.
 All geometry, materials, generated textures, shared artwork references, and
 tracking listeners are released by the adapter on teardown, including pending
 loads. Artwork errors emit `balloonnameerror` without stopping video playback.
+
+### Fairy with a magic wand (category 0 / design 3)
+
+```json
+{
+  "targetName": "gift",
+  "videoUrl": "videos/gift.mp4",
+  "enableBanner": true,
+  "bannerType": 0,
+  "bannerDesignType": 3,
+  "bannerMessage": "Happy Birthday\nPriya",
+  "bannerOptions": {
+    "duration": 5,
+    "speed": 1,
+    "size": 1,
+    "fairySize": 0.48,
+    "offsetX": 0,
+    "offsetY": 0,
+    "sparkleColor": "#ffd778",
+    "textColor": "#78402d",
+    "fairyTint": "#ffffff",
+    "ribbonTint": "#ffffff",
+    "showFairy": true,
+    "useHoverPose": true,
+    "showCircle": true,
+    "showParticles": true,
+    "showTrail": true,
+    "showBurst": true,
+    "showStars": true,
+    "showMessage": true,
+    "showWandHighlight": false,
+    "particleCount": 72,
+    "maxTextureSize": 768
+  }
+}
+```
+
+The fairy enters from the right on a curved flight path (0-1.5s), faces inward,
+and waves her painted wand while golden particles and a progressively drawn
+Three.js line circle the picture (1.5-3s). A wand-tip burst and outward-moving
+stars follow (3-4s). The personalized ribbon materializes above the image (4-5s),
+then the fairy floats with occasional wand glints. The ring fits portrait and
+landscape picture bounds, staying outside all four corners. It is generated at
+runtime rather than using the S-shaped artwork as a substitute for the circle.
+
+Both complete poses already contain wings and a wand. A brief weighted crossfade
+switches from the flying to hover pose; only one solid fairy is composited. Full
+sprite rotation, scale, and bobbing simulate the wand wave and flight. The wand
+tip is calculated from the mirrored artwork coordinates and follows that rotation.
+This is 2.5D animation, with no independent arm or wing rig. The two standalone
+wing images are preserved in `assets/` but not downloaded or rendered, avoiding
+duplicated wings. True independent flapping needs a wingless body layer. The
+optional `showWandHighlight` samples only the star head of the separate wand
+texture; it does not add a second handle. It is disabled by default.
+
+The default effect requests six WebP textures: the two complete poses, trail,
+burst, stars, and ribbon. Visibility options exclude unused images; disabling
+`useHoverPose` omits the alternate character. Shared leases retain existing
+artwork when features change, and texture uploads are capped at 768 pixels per
+dimension by default (configurable 256-1024), without mipmaps. Sprites sharing a
+texture use one instanced draw. Real-time particles use one generated star/glow
+texture and one instanced draw, capped at 96 (72 by default), with at most eight
+idle glints. The circle uses a bounded 129-vertex line.
+
+`duration` accepts 0.5-60 seconds; `speed` (0.1-3) multiplies the animation rate.
+`size` scales the arrangement (0.15-3), while `fairySize` controls character width
+within it (0.15-1). Offsets are in picture-width units: positive X moves right,
+positive Y moves up. The ring continues to fit the measured picture even when
+the other objects are repositioned or scaled. Colors control particles, text,
+and artwork tints. All sprites, particles, and line fragments clip against the
+full combined picture/video rectangle in tracked coordinates, including during
+the entrance and with custom positions. Leave room beside the printed photo in
+the camera view for the fairy. The underlying birthday video stays visible.
+
+The existing `enableBanner` master switch runs before registry lookup or asset
+loading. Designs 0, 1, and 2 remain available; one banner design is selected per
+target, so the fairy does not also create babies, gifts, or balloon arrangements.
+Video, image tracking, and independent confetti retain their existing controls.
+Tracking loss hides and resets the fairy; reacquisition replays the reveal.
+
+For standalone Three.js use, construct `FairyMagicWandEffect` with
+`{THREE, document, parent, width, pictureHeight, message, ...options}`. `parent`
+should follow the tracked transform at the top center of the combined picture
+bounds. Use `load()`, `start()`, `update(deltaSeconds)`, `reset()` on target loss,
+and `dispose()` on teardown. `configure()` updates text, timing, colors, position,
+scale, and enabled/visibility options; call `load()` afterward to reconcile any
+new images or procedural features. `seek(seconds)` supports previews. Geometry,
+materials, generated textures, shared artwork leases, and adapter tracking
+listeners are released on removal, including pending asset loads. Load failures
+emit `fairymagicerror` on the decoration entity while video continues.
 
 ### Target confetti
 

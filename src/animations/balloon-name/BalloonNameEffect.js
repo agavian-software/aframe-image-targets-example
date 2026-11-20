@@ -1,5 +1,5 @@
 const {acquireBalloonAssets} = require('./assets')
-const {SpriteBatch} = require('./sprite-batch')
+const {SpriteBatch} = require('../shared/sprite-batch')
 const {drawLetterAtlas, drawMessage} = require('./text')
 const {mix, getNameLayout, getBalloonFrame, getLetterFrame, getBalloonParticle} = require('./timeline')
 

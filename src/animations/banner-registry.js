@@ -26,6 +26,14 @@ const BANNER_ANIMATIONS = Object.freeze({
         return {register: registerBalloonNameEffect, getPlacement: getBalloonPlacement, getOptions: getBalloonOptions}
       },
     }),
+    3: Object.freeze({
+      id: 'fairy-magic-wand',
+      component: 'magic-fairy-wand',
+      load: () => {
+        const {registerFairyMagicWandEffect, getFairyPlacement, getFairyOptions} = require('./fairy-magic-wand')
+        return {register: registerFairyMagicWandEffect, getPlacement: getFairyPlacement, getOptions: getFairyOptions}
+      },
+    }),
   }),
   1: Object.freeze({}),
   2: Object.freeze({}),
