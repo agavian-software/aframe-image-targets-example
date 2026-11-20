@@ -1,4 +1,4 @@
-const {getTargetVideoLayout} = require('./target-size')
+const {getTargetVideoLayout} = require('../../target-size')
 
 const BIRTHDAY_FILES = [
   '01_left_baby_no_wings.png',
@@ -124,7 +124,7 @@ const registerMagicBirthdayBanner = (window) => {
       text: {default: 'Happy Birthday!'},
       // Type 0 is the flying-baby design. Types 1 and 2 are reserved.
       bannerType: {default: '0'},
-      assetBase: {default: './assets/birthday'},
+      assetBase: {default: './animations/birthday-banner/assets'},
     },
 
     init() {

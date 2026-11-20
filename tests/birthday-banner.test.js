@@ -2,7 +2,7 @@ const {test} = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const {BIRTHDAY_FILES, getBirthdayPlacement, getBirthdayFrame, drawBirthdayText, isBirthdayBannerType} = require('../src/birthday-banner')
+const {BIRTHDAY_FILES, getBirthdayPlacement, getBirthdayFrame, drawBirthdayText, isBirthdayBannerType} = require('../src/animations/birthday-banner')
 const {getTargetVideoLayout} = require('../src/target-size')
 const {getMagicEntries} = require('../src/magic-entries')
 
@@ -82,7 +82,7 @@ test('all seven exact PNG filenames retain RGBA transparency and original dimens
   const expected = [[394, 472], [396, 471], [170, 177], [176, 205], [178, 206], [165, 175], [1099, 470]]
   assert.equal(BIRTHDAY_FILES.length, 7)
   BIRTHDAY_FILES.forEach((filename, index) => {
-    const data = fs.readFileSync(path.join(__dirname, '../src/assets/birthday', filename))
+    const data = fs.readFileSync(path.join(__dirname, '../src/animations/birthday-banner/assets', filename))
     assert.equal(data.subarray(1, 4).toString(), 'PNG')
     assert.deepEqual([data.readUInt32BE(16), data.readUInt32BE(20)], expected[index])
     assert.equal(data[25], 6, `${filename} must retain its alpha channel`)

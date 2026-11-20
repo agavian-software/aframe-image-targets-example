@@ -2,7 +2,7 @@ const {getVideoMaskConfig, prepareVideoMaskConfig} = require('./video-mask')
 const {getShapeVideoScale, getTrackedTargetSize, getTargetVideoLayout} = require('./target-size')
 const {registerMagicTargetVideoCover} = require('./video-cover')
 const {registerMagicTargetConfetti} = require('./target-confetti')
-const {registerMagicBirthdayBanner, getBirthdayPlacement, isBirthdayBannerType} = require('./birthday-banner')
+const {registerMagicBirthdayBanner, getBirthdayPlacement, isBirthdayBannerType} = require('./animations/birthday-banner')
 
 const MAGIC_CDN_BASE = 'https://d1y2o0xoe5yirl.cloudfront.net'
 

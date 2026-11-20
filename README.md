@@ -126,10 +126,28 @@ The transparent CanvasTexture wraps and scales the message to fit the banner.
 At runtime, change the decoration entity's `magic-birthday-banner` `text` property
 to update it without rebuilding textures or restarting the animation.
 
-The seven original PNGs are in `src/assets/birthday/` and retain their exact
-filenames and proportions. Webpack copies them to `dist/assets/birthday/`.
+The animation's code and artwork live together:
+
+```text
+src/animations/
+  birthday-banner/
+    index.js       # Component, movement, text, and asset loading
+    assets/        # Seven original transparent PNGs
+```
+
+The PNGs retain their exact filenames and proportions. Webpack copies animation
+asset folders to `dist/animations/<animation-name>/assets/`. The birthday component
+requests its images only when an enabled, supported banner is created; copying
+them into the deployment does not preload them in the browser.
 Live targets share the PNG textures; geometry, materials, canvas textures, and
 event listeners are released when their decoration is removed.
+
+Add future designs in separate `src/animations/<animation-name>/` folders, each
+with its own entry module and optional `assets/` folder. Each module owns its asset
+list and behavior, so designs do not need the same number of images. Animation
+JavaScript is currently imported by the playback module; loading code on demand
+with dynamic imports can be added when multiple designs are available. Confetti
+remains a separate procedural effect in `src/target-confetti.js` and needs no PNGs.
 
 ### Target confetti
 
