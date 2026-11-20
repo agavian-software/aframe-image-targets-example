@@ -64,9 +64,11 @@ test('transparent text is centered, wrapped, and shrunk into the banner safe are
   assert.ok(calls.filter(call => call[0] === 'text').every(call => call[1] === ''))
 })
 
-test('banner type zero uses the child design and types one and two remain reserved', () => {
+test('the child design supports only category zero / design zero', () => {
   for (const value of [0, '0', undefined, null]) assert.equal(isBirthdayBannerType(value), true)
-  for (const value of [1, 2, '1', '2']) assert.equal(isBirthdayBannerType(value), false)
+  for (const value of [1, 2, 3, 4, 5, 6, '1', '2']) assert.equal(isBirthdayBannerType(value), false)
+  for (const value of [0, '0', undefined]) assert.equal(isBirthdayBannerType(0, value), true)
+  for (const value of [1, '1', -1, 0.5, null]) assert.equal(isBirthdayBannerType(0, value), false)
 })
 
 test('birthday messages support entry overrides and response defaults', () => {

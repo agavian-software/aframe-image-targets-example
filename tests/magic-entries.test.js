@@ -89,6 +89,30 @@ test('effect flags recognize false boolean, number, and string values without tr
   assert.equal(legacy.enableConfetti, true)
   assert.equal(legacy.enableBanner, true)
   assert.equal(legacy.bannerType, '0')
+  assert.equal(legacy.bannerDesignType, 0)
+})
+
+test('banner categories and design IDs inherit response defaults with per-entry overrides', () => {
+  const entries = getMagicEntries({status: 'MATCHED', data: {
+    bannerType: 6, bannerDesignType: '12', videoUrlV1: [
+      {...videoEntry},
+      {...videoEntry, targetName: 'second', bannerType: 0, bannerDesignType: 0},
+      {...videoEntry, targetName: 'third', bannerType: '3', bannerDesignType: ' 2 '},
+    ],
+  }})
+  assert.deepEqual(entries.map(({bannerType, bannerDesignType}) => [bannerType, bannerDesignType]),
+    [['6', 12], ['0', 0], ['3', 2]])
+})
+
+test('missing design IDs default to zero and invalid IDs cannot select design zero', () => {
+  for (const value of [undefined, null]) {
+    const [entry] = getMagicEntries({videoUrlV1: [{...videoEntry, bannerDesignType: value}]})
+    assert.equal(entry.bannerDesignType, 0)
+  }
+  for (const value of [-1, 0.5, 'invalid', '', true, {}, Number.MAX_SAFE_INTEGER + 1]) {
+    const [entry] = getMagicEntries({videoUrlV1: [{...videoEntry, bannerDesignType: value}]})
+    assert.equal(entry.bannerDesignType, null)
+  }
 })
 
 test('entry banner text takes priority over response text and preserves blank messages', () => {

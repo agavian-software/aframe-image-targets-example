@@ -1,4 +1,5 @@
 const {getTargetVideoLayout} = require('../../target-size')
+const {getBannerAnimation} = require('../banner-registry')
 
 const BIRTHDAY_FILES = [
   '01_left_baby_no_wings.png',
@@ -12,7 +13,8 @@ const BIRTHDAY_FILES = [
 const BANNER_ASPECT = 1099 / 470
 const ENTRANCE_SECONDS = 1.7
 const assetCache = new Map()
-const isBirthdayBannerType = value => String(value ?? 0).trim() === '0'
+const isBirthdayBannerType = (bannerType, bannerDesignType) =>
+  getBannerAnimation(bannerType ?? 0, bannerDesignType)?.id === 'birthday-banner'
 
 const getBirthdayPlacement = (targetSize, properties, videoLayout) => {
   const picture = getTargetVideoLayout({}, targetSize, properties, 1)
@@ -122,8 +124,9 @@ const registerMagicBirthdayBanner = (window) => {
       targetName: {default: ''},
       width: {type: 'number', default: 1},
       text: {default: 'Happy Birthday!'},
-      // Type 0 is the flying-baby design. Types 1 and 2 are reserved.
+      // The registry selects this design for category 0 / design 0.
       bannerType: {default: '0'},
+      bannerDesignType: {type: 'int', default: 0},
       assetBase: {default: './animations/birthday-banner/assets'},
     },
 
@@ -131,7 +134,7 @@ const registerMagicBirthdayBanner = (window) => {
       this.elapsed = 0
       this.tracked = false
       this.ready = false
-      this.supported = isBirthdayBannerType(this.data.bannerType)
+      this.supported = isBirthdayBannerType(this.data.bannerType, this.data.bannerDesignType)
       this.removed = false
       this.materials = []
       this.geometries = []
@@ -160,7 +163,7 @@ const registerMagicBirthdayBanner = (window) => {
     },
 
     update(oldData = {}) {
-      this.supported = isBirthdayBannerType(this.data.bannerType)
+      this.supported = isBirthdayBannerType(this.data.bannerType, this.data.bannerDesignType)
       if (!this.supported) {
         this.group.visible = false
         this.elapsed = 0

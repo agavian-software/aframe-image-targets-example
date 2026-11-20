@@ -107,20 +107,25 @@ WebSocket `MATCHED` responses configure each `data.videoUrlV1[]` entry:
   "enableConfetti": true,
   "enableBanner": true,
   "bannerMessage": "Happy Birthday!\nAarav",
-  "bannerType": 0
+  "bannerType": 0,
+  "bannerDesignType": 0
 }
 ```
 
 `enableConfetti` and `enableBanner` independently control their effects per target.
 Disabled effects are not created and stay disabled during resizing, tracking
 reacquisition, and fullscreen transitions. Video playback continues normally.
-`bannerType: 0` selects this flying-baby banner; types `1` and `2` are reserved
-for future designs and currently render no banner. `bannerMessage` supplies the
-text, including line breaks; an empty string keeps the banner blank.
+`bannerType` identifies one of the seven categories from `0` to `6`.
+`bannerDesignType` is a nonnegative integer selecting a design within the category
+and defaults to `0`. Category `0` / design `0` selects this flying-baby banner.
+Other pairs currently render no banner until their designs are implemented and
+mapped; video and confetti continue normally. Invalid IDs also render no banner.
+`bannerMessage` supplies the text, including line breaks; an empty string keeps
+the banner blank.
 
-For older responses, omitted flags default to enabled and an omitted type selects
-`0`. The legacy `birthdayText` field is also accepted. The message defaults to
-`Happy Birthday!` when neither message field is supplied. Entry settings override
+For older responses, omitted flags default to enabled, and omitted category and
+design IDs each default to `0`. The legacy `birthdayText` field is also accepted.
+The message defaults to `Happy Birthday!` when neither message field is supplied. Entry settings override
 response defaults. Boolean flags also accept `1`/`0` and `"true"`/`"false"`.
 The transparent CanvasTexture wraps and scales the message to fit the banner.
 At runtime, change the decoration entity's `magic-birthday-banner` `text` property
@@ -130,6 +135,7 @@ The animation's code and artwork live together:
 
 ```text
 src/animations/
+  banner-registry.js  # API category/design mapping
   birthday-banner/
     index.js       # Component, movement, text, and asset loading
     assets/        # Seven original transparent PNGs
@@ -144,8 +150,22 @@ event listeners are released when their decoration is removed.
 
 Add future designs in separate `src/animations/<animation-name>/` folders, each
 with its own entry module and optional `assets/` folder. Each module owns its asset
-list and behavior, so designs do not need the same number of images. Animation
-JavaScript is currently imported by the playback module; loading code on demand
+list and behavior, so designs do not need the same number of images.
+
+Register new designs in `src/animations/banner-registry.js`: the outer key is
+`bannerType` and the inner key is `bannerDesignType`. Each mapping names the design
+ID and A-Frame component, with a `load()` function returning `register(window)` and
+`getPlacement(targetSize, targetProperties, videoLayout)`. Components receive
+`targetName`, `width`, `text`, `bannerType`, and `bannerDesignType`, and handle their
+own tracking and cleanup. Playback uses the mapping for creation and resizing, so
+new designs do not require a category switch in the player. Entry-level API fields
+override response defaults; numeric string IDs are accepted.
+
+Only the selected, enabled design is registered and requests its artwork.
+`enableBanner` is the master switch and is checked before any category/design
+lookup or animation loading. When false, no banner is created, even for a mapped
+pair such as `0` / `0`.
+Animation JavaScript is currently bundled together; downloading code on demand
 with dynamic imports can be added when multiple designs are available. Confetti
 remains a separate procedural effect in `src/target-confetti.js` and needs no PNGs.
 

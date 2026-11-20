@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const vm = require('node:vm')
 const {getMagicEntries} = require('../src/magic-entries')
 const videoMask = require('../src/video-mask')
+const {getBannerAnimation} = require('../src/animations/banner-registry')
 
 class Element {
   constructor(hidden = false) {
@@ -45,7 +46,8 @@ class Element {
   focus() {}
 }
 
-const createApp = ({play, fullscreen = 'standard', loadFailure = false} = {}) => {
+const createApp = ({play, fullscreen = 'standard', loadFailure = false,
+  resolveBannerAnimation = getBannerAnimation} = {}) => {
   const ids = ['magic-video', 'videoPlayer', 'customLoader', 'scanOverlay', 'scanStatusText',
     'videoLoader', 'videoLoaderText', 'identificationTimeout', 'identificationTryAgain',
     'identificationExit', 'soundToggle', 'fullscreenToggle', 'videoMessage', 'videoMessageText',
@@ -110,6 +112,7 @@ const createApp = ({play, fullscreen = 'standard', loadFailure = false} = {}) =>
     ...sandbox, module: targetModule,
     require: name => name === './video-mask'
       ? {...videoMask, prepareVideoMaskConfig: async config => config}
+      : name === './animations/banner-registry' ? {getBannerAnimation: resolveBannerAnimation}
       : require(`../src/${name.slice(2)}`),
   })
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/app'), 'utf8'), {
@@ -352,6 +355,37 @@ test('birthday banner is a separate target child above the video and clears with
   assert.equal(target.querySelector('.magic-birthday-banner'), null)
 })
 
+test('enableBanner is checked before looking up or loading any banner design', async () => {
+  for (const enableBanner of [false, 0, 'false', '0']) {
+    const app = createApp({resolveBannerAnimation() {
+      assert.fail('Disabled banners must not reach the animation registry')
+    }})
+    await app.start([{targetName: 'gift', videoUrl: 'gift.mp4',
+      enableBanner, bannerType: 0, bannerDesignType: 0}])
+    assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+    assert.equal(app.video.paused, false)
+    await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+    await app.scene.emit('xrimagelost', {name: 'gift'})
+    await app.scene.emit('xrimagefound', {name: 'gift'})
+    await app.elements.fullscreenToggle.emit('click')
+    await app.elements.videoBackToTarget.emit('click')
+    assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+  }
+
+  let lookups = 0
+  let loads = 0
+  const app = createApp({resolveBannerAnimation(...args) {
+    lookups++
+    const definition = getBannerAnimation(...args)
+    return {...definition, load() { loads++; return definition.load() }}
+  }})
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4',
+    enableBanner: true, bannerType: 0, bannerDesignType: 0}])
+  assert.equal(lookups, 1)
+  assert.equal(loads, 1)
+  assert.ok(app.elements['magic-image-target'].querySelector('.magic-birthday-banner'))
+})
+
 test('backend flags independently control decorations through resizing, tracking, and fullscreen', async () => {
   for (const enableConfetti of [false, true]) {
     for (const enableBanner of [false, true]) {
@@ -368,6 +402,7 @@ test('backend flags independently control decorations through resizing, tracking
         const banner = target.querySelector('.magic-birthday-banner').attributes.get('magic-birthday-banner')
         assert.equal(banner.text, 'Happy Birthday!\nAarav')
         assert.equal(banner.bannerType, '0')
+        assert.equal(banner.bannerDesignType, 0)
       }
       await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
       checkEffects()
@@ -386,16 +421,41 @@ test('backend flags independently control decorations through resizing, tracking
   }
 })
 
-test('reserved banner types do not render the child design or interfere with video playback', async () => {
-  for (const bannerType of [1, 2, '1', '2']) {
+test('unmapped or invalid category/design pairs keep video playing without a banner', async () => {
+  const pairs = [
+    ...[1, 2, 3, 4, 5, 6, '1', '6', -1, 7, 'invalid'].map(bannerType => [bannerType, 0]),
+    ...[1, '1', 12, -1, 0.5, 'invalid', '', true].map(bannerDesignType => [0, bannerDesignType]),
+  ]
+  for (const [bannerType, bannerDesignType] of pairs) {
     const app = createApp()
-    await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: true, enableConfetti: false, bannerType}])
+    await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: true,
+      enableConfetti: false, bannerType, bannerDesignType}])
     assert.equal(app.elements['magic-image-target'].querySelector('.magic-birthday-banner'), null)
     await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
     assert.equal(app.video.paused, false)
     assert.equal(app.plane().attributes.get('visible'), true)
     assert.equal(app.plane().attributes.has('magic-target-confetti'), false)
   }
+})
+
+test('response selection defaults and entry design overrides decide each targets banner', async () => {
+  const app = createApp()
+  await app.window.emit('imageidentified', {
+    bannerType: 0, bannerDesignType: 1,
+    videoUrlV1: [
+      {targetName: 'gift', videoUrl: 'one.mp4'},
+      {targetName: 'second', videoUrl: 'two.mp4', bannerDesignType: '0'},
+    ],
+  })
+  assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+  const second = app.scene.children.find(child => child.id === 'magic-image-target-1')
+  const banner = second.querySelector('.magic-banner-animation')
+  assert.ok(banner)
+  assert.equal(banner.attributes.get('magic-birthday-banner').bannerDesignType, 0)
+  await app.scene.emit('xrimagefound', {name: 'second'})
+  assert.equal(app.video.src.endsWith('/two.mp4'), true)
+  await app.video.emit('ended')
+  assert.equal(second.parent.children.includes(second), false)
 })
 
 test('different matched targets keep their own effects when switching videos', async () => {
