@@ -424,7 +424,7 @@ test('backend flags independently control decorations through resizing, tracking
 test('unmapped or invalid category/design pairs keep video playing without a banner', async () => {
   const pairs = [
     ...[1, 2, 3, 4, 5, 6, '1', '6', -1, 7, 'invalid'].map(bannerType => [bannerType, 0]),
-    ...[2, '2', 12, -1, 0.5, 'invalid', '', true].map(bannerDesignType => [0, bannerDesignType]),
+    ...[3, '3', 12, -1, 0.5, 'invalid', '', true].map(bannerDesignType => [0, bannerDesignType]),
   ]
   for (const [bannerType, bannerDesignType] of pairs) {
     const app = createApp()
@@ -441,7 +441,7 @@ test('unmapped or invalid category/design pairs keep video playing without a ban
 test('response selection defaults and entry design overrides decide each targets banner', async () => {
   const app = createApp()
   await app.window.emit('imageidentified', {
-    bannerType: 0, bannerDesignType: 2,
+    bannerType: 0, bannerDesignType: 3,
     videoUrlV1: [
       {targetName: 'gift', videoUrl: 'one.mp4'},
       {targetName: 'second', videoUrl: 'two.mp4', bannerDesignType: '0'},
@@ -510,6 +510,45 @@ test('disabled banners do not resolve the gift design or create its entity', asy
   const app = createApp({resolveBannerAnimation() { assert.fail('Banner master switch must win') }})
   await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: false,
     enableConfetti: true, bannerType: 0, bannerDesignType: 1}])
+  assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
+  assert.equal(app.video.paused, false)
+})
+
+test('balloon names receive picture bounds and resize without changing video or other designs', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: true,
+    enableConfetti: false, bannerType: 0, bannerDesignType: 2, bannerMessage: 'HAPPY BIRTHDAY',
+    bannerOptions: {name: 'PRIYA', showCenterBouquet: false, pictureHeight: 100, width: 99}}])
+  const target = app.elements['magic-image-target']
+  const balloon = target.querySelector('.magic-balloon-name')
+  assert.ok(balloon)
+  assert.equal(target.querySelector('.magic-birthday-banner'), null)
+  assert.equal(target.querySelector('.magic-gift-box'), null)
+  const options = balloon.attributes.get('magic-balloon-name')
+  assert.equal(options.name, 'PRIYA')
+  assert.equal(options.text, 'HAPPY BIRTHDAY')
+  assert.equal(options.width, 1.04)
+  assert.equal(options.pictureHeight, 1.04)
+  assert.ok(balloon.attributes.get('position').y >= 0.52)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  const resized = balloon.attributes.get('magic-balloon-name')
+  assert.equal(resized.name, 'PRIYA')
+  assert.equal(resized.width, 2.08)
+  assert.equal(resized.pictureHeight, 2.08)
+  assert.ok(balloon.object3D.position.y >= 1.04)
+  await app.elements.fullscreenToggle.emit('click')
+  await app.elements.videoBackToTarget.emit('click')
+  assert.equal(app.video.paused, false)
+  assert.equal(app.video.playCalls, 1)
+  await app.video.emit('ended')
+  assert.equal(target.querySelector('.magic-balloon-name'), null)
+})
+
+test('disabled banners skip the balloon registry and leave confetti independent', async () => {
+  const app = createApp({resolveBannerAnimation() { assert.fail('Disabled balloons must not be resolved') }})
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: false,
+    enableConfetti: true, bannerType: 0, bannerDesignType: 2, bannerOptions: {name: 'PRIYA'}}])
   assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
   assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
   assert.equal(app.video.paused, false)

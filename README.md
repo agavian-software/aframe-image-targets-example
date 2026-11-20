@@ -119,6 +119,7 @@ reacquisition, and fullscreen transitions. Video playback continues normally.
 `bannerDesignType` is a nonnegative integer selecting a design within the category
 and defaults to `0`. Category `0` / design `0` selects this flying-baby banner;
 category `0` / design `1` selects the magical gift box below the image.
+Category `0` / design `2` selects balloons carrying a personalized name.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -146,6 +147,14 @@ src/animations/
     timeline.js    # Reveal stages and particle trajectories
     assets.js      # WebP filenames, shared loading, and disposal
     assets/        # Eight supplied WebP images
+  balloon-name/
+    index.js       # A-Frame adapter and picture bounds
+    BalloonNameEffect.js # Reusable Three.js effect
+    timeline.js    # Entrance, staggered name, reveal, and floating
+    sprite-batch.js # Instanced sprites and video-area clipping
+    text.js        # Dynamic letter atlas and message CanvasTextures
+    assets.js      # Selective WebP loading and shared texture leases
+    assets/        # Eight supplied WebP images
 ```
 
 The PNGs retain their exact filenames and proportions. Webpack copies animation
@@ -162,7 +171,9 @@ list and behavior, so designs do not need the same number of images.
 Register new designs in `src/animations/banner-registry.js`: the outer key is
 `bannerType` and the inner key is `bannerDesignType`. Each mapping names the design
 ID and A-Frame component, with a `load()` function returning `register(window)` and
-`getPlacement(targetSize, targetProperties, videoLayout)`. Components receive
+`getPlacement(targetSize, targetProperties, videoLayout)`. Placements may also
+return `componentOptions` for measured bounds needed by a design; these are
+applied on creation and tracked geometry updates. Components receive
 `targetName`, `width`, `text`, `bannerType`, and `bannerDesignType`, and handle their
 own tracking and cleanup. Playback uses the mapping for creation and resizing, so
 new designs do not require a category switch in the player. Entry-level API fields
@@ -244,6 +255,93 @@ CanvasTexture, and the shared artwork reference, including pending requests. The
 A-Frame adapter handles these calls and removes tracking listeners on teardown.
 Artwork failures emit `giftboxerror` on the decoration entity and leave video
 playback running.
+
+### Balloons carrying a name (category 0 / design 2)
+
+```json
+{
+  "targetName": "gift",
+  "videoUrl": "videos/gift.mp4",
+  "enableBanner": true,
+  "bannerType": 0,
+  "bannerDesignType": 2,
+  "bannerMessage": "HAPPY BIRTHDAY",
+  "bannerOptions": {
+    "name": "PRIYA",
+    "duration": 6,
+    "size": 1,
+    "offsetX": 0,
+    "offsetY": 0.025,
+    "letterColor": "#fff8eb",
+    "outlineColor": "#783a32",
+    "messageColor": "#783a32",
+    "sparkleColor": "#ffe099",
+    "pinkTint": "#ffffff",
+    "goldTint": "#ffffff",
+    "showBouquets": true,
+    "showLetters": true,
+    "showBanner": true,
+    "showCenterBouquet": false,
+    "showCelebration": true,
+    "particleCount": 48,
+    "maxTextureSize": 768
+  }
+}
+```
+
+The default six-second sequence brings bouquets out from the left and right
+edges (0-2s), releases alternating pink and gold letter balloons one by one
+(2-4s), reveals the message plaque below them (4-5s), and celebrates with the
+golden trail, balloon burst, and real-time sparkles (5-6s). Independent floating
+and rotation continue afterward. `duration` scales the reveal and motion
+(0.5-60 seconds). Each PNG's matching WebP is imported under its exact base name;
+the original artwork proportions, including long ribbon tails, are preserved.
+
+`bannerOptions.name` supplies the personalized name. The frontend creates one
+dynamic letter per balloon using a single CanvasTexture atlas, with separate
+instanced batches for pink balloons, gold balloons, and letters. Name layout is
+centered and shrinks spacing/balloons for longer names, with a maximum of 32
+Unicode graphemes (including spaces). Spaces leave gaps. Accented letters and
+combined characters are kept together where `Intl.Segmenter` is supported. Very
+long names become small to keep a single horizontal row. An empty name creates
+no letter balloons and does not download their images. `bannerMessage` controls
+the independently rendered plaque text; it is never baked into the source art.
+
+`showCenterBouquet` is off by default; enabling it adds the optional pre-lettered
+Happy Birthday bouquet above the name and loads its image only then. The other
+visibility flags independently control side bouquets, letter balloons, plaque,
+and celebration artwork/particles. Hidden features do not request their images.
+Enabling a feature at runtime retains existing shared textures and loads only new
+files. The default layout requests seven images, capped at 768 pixels per
+dimension on upload with no mipmaps; `maxTextureSize` accepts 256-1024 at load.
+Particles use one generated sparkle texture and one instanced draw, capped at 80
+(48 by default); at most eight emit occasionally after the main celebration.
+
+The effect is anchored at the top center of the combined picture/video bounds.
+The side bouquets settle fully outside the sides, while name balloons and plaque
+sit above the picture. Every sprite and particle clips against that full target
+rectangle in tracked coordinates, including during entrance, rotation, resizing,
+and configurable offsets. `size` scales the arrangement (0.15-3); `offsetX` moves
+it horizontally and positive `offsetY` lifts it, in picture-width units. Tints
+multiply the original pink/gold artwork; other colors control letters, outlines,
+message, and sparkles. Leave space around the printed picture in the camera view
+for the side bouquets and optional center bouquet.
+
+The banner master switch is still checked before selecting/loading the effect.
+Each target selects one banner design, so balloons do not instantiate the
+flying-baby or gift-box effect on that target. Confetti and video retain their own
+controls. Tracking loss hides and resets the animation; reacquisition replays it.
+
+For standalone Three.js use, construct `BalloonNameEffect` with
+`{THREE, document, parent, name, message, width, pictureHeight, ...options}`, where
+`parent` follows the tracked transform at the top center of the picture bounds.
+Call `load()`, `start()`, `update(deltaSeconds)`, `reset()` on target loss, and
+`dispose()` on removal. `configure()` changes name, message, timing, colors,
+position, scale, and enabled/visibility settings; call `load()` afterward to
+reconcile any newly required optional images. `seek(seconds)` supports previews.
+All geometry, materials, generated textures, shared artwork references, and
+tracking listeners are released by the adapter on teardown, including pending
+loads. Artwork errors emit `balloonnameerror` without stopping video playback.
 
 ### Target confetti
 

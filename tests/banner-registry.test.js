@@ -23,7 +23,7 @@ test('all seven categories are represented and unmapped pairs have no fallback',
     assert.equal(getBannerAnimation(category, 0), null)
     assert.equal(getBannerAnimation(String(category), '1'), null)
   }
-  for (const design of [2, 15, 100]) assert.equal(getBannerAnimation(0, design), null)
+  for (const design of [3, 15, 100]) assert.equal(getBannerAnimation(0, design), null)
 })
 
 test('category zero / design one selects the gift without changing the original design', () => {
@@ -42,4 +42,14 @@ test('invalid categories and designs never select the default animation', () => 
     assert.equal(getBannerAnimation(0, value), null)
   }
   for (const category of [7, 8, 100, '7']) assert.equal(getBannerAnimation(category, 0), null)
+})
+
+test('category zero / design two selects balloons while preserving designs zero and one', () => {
+  const definition = getBannerAnimation('0', '2')
+  assert.equal(definition.id, 'balloon-name')
+  assert.equal(definition.component, 'magic-balloon-name')
+  assert.equal(typeof definition.load().register, 'function')
+  assert.equal(typeof definition.load().getPlacement, 'function')
+  assert.equal(getBannerAnimation(0, 0).id, 'birthday-banner')
+  assert.equal(getBannerAnimation(0, 1).id, 'magical-gift-box')
 })

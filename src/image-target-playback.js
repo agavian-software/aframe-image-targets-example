@@ -185,6 +185,7 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       banner.setAttribute('position', {x: placement.x, y: placement.y, z: 0.018})
       banner.setAttribute(bannerDefinition.component, {
         ...bannerAnimation.getOptions?.(match.bannerOptions),
+        ...placement.componentOptions,
         targetName: match.targetName,
         width: placement.width,
         text: match.birthdayText,
@@ -299,7 +300,9 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       const placement = experience.bannerAnimation.getPlacement(targetSize, experience.targetProperties, {width, height, x, y})
       experience.banner.object3D.position.x = placement.x
       experience.banner.object3D.position.y = placement.y
-      experience.banner.setAttribute(experience.bannerDefinition.component, 'width', placement.width)
+      for (const [property, value] of Object.entries({...placement.componentOptions, width: placement.width})) {
+        experience.banner.setAttribute(experience.bannerDefinition.component, property, value)
+      }
     }
     experience.loadingPanel.object3D.scale.set(
       width / experience.loadingSize.width, height / experience.loadingSize.height, 1)
