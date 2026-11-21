@@ -76,6 +76,13 @@ const BANNER_ANIMATIONS = Object.freeze({
         return {register: registerGoldenRingsAnniversaryEffect, getPlacement: getAnniversaryPlacement, getOptions: getAnniversaryOptions}
       },
     }),
+    1: Object.freeze({
+      id: 'magical-wedding-flower-arch', component: 'magic-wedding-flower-arch', revealsVideo: true,
+      load: () => {
+        const {registerMagicalWeddingFlowerArchEffect, getFlowerArchPlacement, getFlowerArchOptions, getInitialVideoOpacity} = require('./magical-wedding-flower-arch')
+        return {register: registerMagicalWeddingFlowerArchEffect, getPlacement: getFlowerArchPlacement, getOptions: getFlowerArchOptions, getInitialVideoOpacity}
+      },
+    }),
   }),
   3: Object.freeze({}),
   4: Object.freeze({}),

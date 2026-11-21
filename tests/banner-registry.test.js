@@ -21,7 +21,7 @@ test('all seven categories are represented and unmapped pairs have no fallback',
   assert.deepEqual(Object.keys(BANNER_ANIMATIONS), ['0', '1', '2', '3', '4', '5', '6'])
   for (let category = 1; category <= 6; category++) {
     if (![1, 2].includes(category)) assert.equal(getBannerAnimation(category, 0), null)
-    if (category !== 1) assert.equal(getBannerAnimation(String(category), '1'), null)
+    if (![1, 2].includes(category)) assert.equal(getBannerAnimation(String(category), '1'), null)
   }
   for (const design of [5, 15, 100]) assert.equal(getBannerAnimation(0, design), null)
 })
@@ -47,13 +47,21 @@ test('category one / design one selects the flying letter and preserves proposal
   assert.equal(getBannerAnimation(0, 0).id, 'birthday-banner')
 })
 
-test('category one / design two selects Cupid and is the only video-revealing design', () => {
+test('category one / design two selects Cupid while decorative designs leave video opacity unchanged', () => {
   const definition = getBannerAnimation('1', '2')
   assert.equal(definition.id, 'cupid-heart-reveal')
   assert.equal(definition.component, 'magic-cupid-reveal')
   assert.equal(definition.revealsVideo, true)
   assert.equal(definition.load().getInitialVideoOpacity(), 0)
   for (const [type, design] of [[0, 0], [0, 4], [1, 0], [1, 1]]) assert.notEqual(getBannerAnimation(type, design).revealsVideo, true)
+})
+
+test('category two / design one selects the interactive wedding arch with its initial video gate', () => {
+  const definition = getBannerAnimation('2', '1')
+  assert.equal(definition.id, 'magical-wedding-flower-arch'); assert.equal(definition.component, 'magic-wedding-flower-arch')
+  assert.equal(definition.revealsVideo, true); assert.equal(definition.load().getInitialVideoOpacity(), 0)
+  assert.equal(typeof definition.load().register, 'function'); assert.equal(typeof definition.load().getPlacement, 'function')
+  assert.equal(getBannerAnimation(2, 0).id, 'golden-rings-anniversary')
 })
 
 test('category two / design zero selects anniversary rings without gating the video', () => {

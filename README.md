@@ -126,6 +126,7 @@ Category `1` / design `0` selects the magical ring proposal below the image.
 Category `1` / design `1` selects the flying love letter above the image.
 Category `1` / design `2` selects Cupid's heart break and video reveal.
 Category `2` / design `0` selects golden rings joining for a wedding anniversary.
+Category `2` / design `1` selects the interactive wedding ribbon and outer floral arch.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -1024,6 +1025,150 @@ The `magic-golden-rings-anniversary` component handles this automatically.
 filters configurable API fields. Code, timeline, text and texture helpers live
 together in `src/animations/golden-rings-anniversary/`. Physically verify tracking
 and visual performance on the deployment phone before release.
+
+### Magical wedding flower arch (category 2, design 1)
+
+`MagicalWeddingFlowerArchEffect` runs in the existing live camera AR scene using
+the tracked target's Object3D, A-Frame Three.js instance, camera and tick. Select
+it in a matched API response or an individual `videoUrlV1` entry:
+
+```json
+{
+  "enableBanner": true,
+  "enableConfetti": false,
+  "bannerType": 2,
+  "bannerDesignType": 1,
+  "bannerOptions": {
+    "anniversaryNumber": 25,
+    "coupleNames": "Eswaran ❤️ Priya",
+    "startDate": "09/12/2001",
+    "endDate": "09/12/2026",
+    "duration": 6.5,
+    "speed": 1,
+    "archScale": 1,
+    "closedVideoOpacity": 0,
+    "useFullArch": true
+  }
+}
+```
+
+The target initially appears tied with the supplied red ribbon. The anniversary
+video surface is hidden and a target-anchored **Tap ribbon to reveal** hint is
+displayed. This state waits indefinitely for a real ribbon tap; it does not
+automatically cut or reveal after a timer. Raycasting uses the existing AR camera
+and canvas. The hit test checks the ribbon's alpha, with a small local touch margin
+to bridge transparent gaps inside the supplied bow, while ignoring empty outer
+corners. Pointer handling rejects drags, multitouch, unrelated UI, paused scenes
+and webpage/fullscreen video playback. Further taps cannot trigger a second cut.
+
+The canonical sequence starts at the accepted tap. The ribbon highlights briefly
+and the ornate scissors move in from the right (0.15–1.15s). The supplied scissor
+texture is partitioned into fixed handles/flowers and two upper blade regions;
+the blades make small independent pivot rotations without drawing duplicate
+scissors. Their cutting point meets the bow, the blades close and the ribbon is
+replaced by its two supplied cut halves (1.35s). Those halves drift left/right and
+down with rotation, fading out by 2.65s. The scissors leave by 2.1s.
+
+Gold/floral bloom sprites rise from the bottom center and outer edges. The left
+and right arch assets reveal upward from fixed bases using cropped UVs and
+matching plane heights, preserving texel proportions as they grow (1.35–4.15s).
+They crossfade into the completed arch (3.8–4.25s). Set `useFullArch: false` to
+retain the two grown halves as the final frame instead. The existing video fades
+from its closed-state opacity to full visibility during late growth (3.2–4.25s).
+The anniversary banner appears below the frame (4.25–5.5s), followed by a soft
+petals/sparkles border overlay and real-time particles. After 6.5s, the complete
+frame and message remain, with subtle motion and reduced particle counts.
+
+**The completed arch frames the outside of the target.** Placement uses the
+center and dimensions of the union of the full printed photo and video surface,
+including original-image crop offsets, masks and video overscan. Upright arch
+artwork scales uniformly to surround both landscape and portrait targets; it may
+extend above the picture to preserve its natural arch proportions. A shader clips
+all arch, bloom, overlay, banner and particle fragments inside the protected
+photo/video rectangle. The ribbon and scissors are the only foreground ceremony
+objects; they are completely gone by full reveal. The final video is unobstructed,
+including when the phone/target tilts or tracking dimensions change.
+
+This design reuses the existing `magic-target-video-cover` opacity gate introduced
+for Cupid. Its registry definition uses `revealsVideo: true` and initializes the
+gate before the surface can appear. It does not create another video element,
+renderer, camera, tracking session or render loop, and never pauses, seeks or
+changes the sound of the existing media. Playback/audio continue under the app's
+existing rules while the AR surface is hidden. `closedVideoOpacity` can be set
+from 0 to 0.35 for a visually secondary video while waiting for the cut. Mask
+loading and resizing preserve this gate and the reveal fade. Removing/disabling
+the effect restores normal video opacity; failed artwork loads emit
+`weddingarcherror` and restore visibility so playback cannot remain stranded.
+
+Tracking loss hides the effect, cancels partial taps, clears the cut state and
+returns the gate to its closed opacity. Reacquisition shows the tied ribbon again
+and requires a fresh tap. Duplicate found events do not reset an active sequence.
+`enableBanner: false` skips registry lookup and artwork loading entirely.
+`bannerOptions.enabled: false` also leaves the video visible. Only one banner
+design is created per target, preserving the other birthday, romantic and
+anniversary designs. Independent confetti remains controlled by `enableConfetti`.
+
+The default message is `Happy Wedding Anniversary`; `anniversaryNumber` supplies
+the ordinal, for example `Happy 25th Wedding Anniversary`. `coupleNames` and
+`startDate` / `endDate` add optional name/date lines. Dates display literally, with
+no locale parsing or time-zone conversion. `bannerMessage` overrides the heading;
+an explicit blank is preserved. Custom headings support `{anniversary}` (25th),
+`{years}` (25), `{coupleNames}` and `{dates}` placeholders. CanvasTexture text wraps
+and shrinks inside the cream banner area, supporting up to six lines / 500 text
+characters. Updating text, names, number, dates or `textColor` reuses that texture
+without restarting the ceremony.
+
+`duration` (0.5–60 seconds, default 6.5) rescales the sequence after the tap, while
+`speed` (0.1–3) multiplies elapsed time. Runtime timing changes preserve the current
+phase and stored tap time. `archScale` (1–1.8) enlarges the outer structure while
+maintaining clearance. `ribbonSize` (0.8–1.4), `scissorSize` (0.2–0.9) and
+`bannerSize` (0.6–1.8) control artwork widths relative to picture width.
+Optional flags `showHint`, `showBloom`, `showMessage`, `showOverlay`,
+`showSparkles` and `showPetals` default to true. Entry options override response
+defaults. Target positions, protected dimensions and asset routing cannot be
+overridden through backend banner options.
+
+All ten supplied WebPs keep their exact filenames and transparency in
+`src/animations/magical-wedding-flower-arch/assets/`. Shared reference-counted
+texture leases cap GPU upload dimensions at `maxTextureSize` (768 by default,
+256–1024), disable mipmaps and release late load results on teardown. Disabled
+artwork features omit their images. Generated sparkles and petals use compact
+CanvasTextures and instanced planes: `particleCount` 0–72 (default 48),
+`petalCount` 0–40 (default 24), reduced to ten sparkles/four petals in the final
+loop. Their simulation and draw calls remain inactive while waiting for the tap.
+`sparkleColor` and `textColor` customize the procedural gold and banner text.
+
+For direct Three.js use, place the parent at the combined photo/video center
+under the existing tracked target, and initialize the video surface's opacity
+gate before making it visible:
+
+```js
+const {MagicalWeddingFlowerArchEffect} = require('./animations/magical-wedding-flower-arch')
+existingVideoCover.setRevealOpacity(0)
+const effect = new MagicalWeddingFlowerArchEffect({
+  THREE, document, parent: pictureCenterAnchor,
+  width: pictureVideoBounds.width, pictureHeight: pictureVideoBounds.height,
+  anniversaryNumber: 25, coupleNames: 'Eswaran ❤️ Priya',
+  onVideoOpacity: opacity => existingVideoCover.setRevealOpacity(opacity),
+})
+await effect.load()
+effect.attachInteraction({element: renderer.domElement, getCamera: () => camera})
+effect.start()                // matching target found; safe before load resolves
+effect.update(deltaSeconds)  // existing AR render tick
+effect.triggerCut()          // optional programmatic equivalent of tapping the ribbon
+effect.reset()               // target lost; rearm the ribbon and close the reveal gate
+effect.configure({message: 'Happy {anniversary} Anniversary'})
+effect.dispose()             // release resources/listeners and restore video opacity
+```
+
+`seek(elapsedSeconds)` previews elapsed time; the reveal begins only after
+`triggerCut()` sets the stored canonical tap time. Use `reset()` to return to the
+untouched closed state. Call `load()` after changing feature flags, the asset base
+or texture resolution. The `magic-wedding-flower-arch` A-Frame component handles
+loading, interaction and tracking events automatically. `getFlowerArchPlacement()`
+and `getFlowerArchOptions()` provide the registry integration. Physically verify
+tracking, touch behavior and visual performance on the deployment phone before
+release.
 
 ### Target confetti
 

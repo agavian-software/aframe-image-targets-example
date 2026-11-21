@@ -714,6 +714,36 @@ test('anniversary rings use the top target bounds and leave the video visible th
   await app.video.emit('ended'); assert.equal(target.querySelector('.magic-golden-rings-anniversary'), null)
 })
 
+test('wedding arch gates the existing video plane, centers its union bounds and preserves playback controls', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'wedding.mp4', enableBanner: true, enableConfetti: false, bannerType: 2, bannerDesignType: 1,
+    bannerOptions: {anniversaryNumber: 25, coupleNames: 'Eswaran ❤️ Priya', width: 99, pictureHeight: 99}}])
+  const target = app.elements['magic-image-target'], arch = target.querySelector('.magic-wedding-flower-arch')
+  assert.ok(arch); assert.equal(target.querySelectorAll('.magic-banner-animation').length, 1)
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 0)
+  assert.equal(arch.attributes.get('position').x, 0); assert.equal(arch.attributes.get('position').y, 0)
+  assert.equal(arch.attributes.get('magic-wedding-flower-arch').text, 'Happy Wedding Anniversary')
+  assert.equal(arch.attributes.get('magic-wedding-flower-arch').coupleNames, 'Eswaran ❤️ Priya')
+  assert.equal(arch.attributes.get('magic-wedding-flower-arch').width, 1.04)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  assert.equal(arch.attributes.get('magic-wedding-flower-arch').width, 2.08)
+  assert.equal(arch.attributes.get('magic-wedding-flower-arch').pictureHeight, 2.08)
+  await app.elements.fullscreenToggle.emit('click'); await app.elements.videoBackToTarget.emit('click')
+  assert.equal(app.video.paused, false); assert.equal(app.video.playCalls, 1)
+  await app.video.emit('ended'); assert.equal(target.querySelector('.magic-wedding-flower-arch'), null)
+})
+
+test('disabled wedding arch leaves video visibility and independent confetti available', async () => {
+  const disabled = createApp()
+  await disabled.start([{targetName: 'gift', videoUrl: 'wedding.mp4', bannerType: 2, bannerDesignType: 1, bannerOptions: {enabled: 'false'}}])
+  assert.equal(disabled.plane().attributes.get('magic-target-video-cover').revealOpacity, 1)
+  const app = createApp({resolveBannerAnimation() { assert.fail('Disabled arch must not resolve') }})
+  await app.start([{targetName: 'gift', videoUrl: 'wedding.mp4', enableBanner: false, enableConfetti: true, bannerType: 2, bannerDesignType: 1}])
+  assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, undefined)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
+})
+
 test('disabled anniversary banners skip registry lookup and leave video and confetti independent', async () => {
   const app = createApp({resolveBannerAnimation() { assert.fail('Disabled anniversary must not resolve') }})
   await app.start([{targetName: 'gift', videoUrl: 'anniversary.mp4', enableBanner: false, enableConfetti: true, bannerType: 2, bannerDesignType: 0}])
