@@ -125,6 +125,7 @@ Category `0` / design `4` selects the interactive birthday cake.
 Category `1` / design `0` selects the magical ring proposal below the image.
 Category `1` / design `1` selects the flying love letter above the image.
 Category `1` / design `2` selects Cupid's heart break and video reveal.
+Category `2` / design `0` selects golden rings joining for a wedding anniversary.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -898,6 +899,131 @@ flags, the asset base or texture size in standalone integrations. Code, pure
 timeline, texture leases and text helpers live together in
 `src/animations/cupid-heart-reveal/`. Verify physical tracking and visual
 performance on the deployment phone before release.
+
+### Golden rings anniversary (category 2, design 0)
+
+`GoldenRingsAnniversaryEffect` runs inside the existing live AR scene using the
+tracked image target's transform and A-Frame's Three.js instance and tick. Select
+it in a matched API response or an individual `videoUrlV1` entry:
+
+```json
+{
+  "enableBanner": true,
+  "enableConfetti": false,
+  "bannerType": 2,
+  "bannerDesignType": 0,
+  "bannerOptions": {
+    "anniversaryNumber": 25,
+    "coupleNames": "Eswaran ❤️ Priya",
+    "startDate": "09/12/2001",
+    "endDate": "09/12/2026",
+    "duration": 7.5,
+    "speed": 1,
+    "size": 1,
+    "ringSize": 0.42,
+    "bannerSize": 1.4,
+    "offsetX": 0,
+    "offsetY": 0
+  }
+}
+```
+
+The individual ring sprites emerge beside opposite picture edges and lift along
+curved paths above the photo (0–1.8s). They approach with gentle planar rotation
+(1.8–3.2s), then crossfade to the final interlocked sprite under the golden joining
+burst. The heart outline grows behind them, accompanied by progressive golden
+particles (3.2–4.5s). The personalized banner rises above the picture (4.5–6s),
+followed by the supplied rose-petal swirls and heart orbit overlay, individual
+falling petals, orbiting heart particles and sparkles (6–7.5s). The interlocked
+rings, heart and banner then float with a subtle shimmer. All ring motion uses
+2.5D sprites; there is no 3D ring model or full 3D spin.
+
+The complete effect anchors to the **top center of the union of the full printed
+photo and video bounds**, including off-center tracking crops, masks and overscan.
+A shader clips the picture/video rectangle in tracked coordinates at every frame.
+This keeps the side entrances visible without painting over the video, and
+protects it when the phone tilts or the effect is resized/repositioned. Final
+rings, heart and banner sit entirely above that edge. The existing camera,
+renderer, image tracking and video playback remain on their current path. This
+design does not use Cupid's reveal gate: the video stays visible and playing
+throughout the sequence. Only one banner design is instantiated per target;
+existing birthday and romantic designs and independent confetti controls remain
+available.
+
+When `bannerMessage` is omitted, the heading is `Happy Wedding Anniversary`.
+`anniversaryNumber` adds the appropriate ordinal, such as `Happy 25th Wedding
+Anniversary`, with correct `1st`, `2nd`, `3rd`, `11th`, `12th` and `13th` endings.
+Its default is zero, which omits the number. `coupleNames` supplies the second
+line, and `startDate` / `endDate` supply the date range. Dates are displayed
+literally as provided, with no locale parsing, time-zone conversion or automatic
+anniversary calculation. Either date can be supplied alone. An explicit empty
+heading stays empty; names and dates remain independently optional.
+
+Set `bannerMessage` to override the heading. Custom messages can use
+`{anniversary}` (for example `25th`), `{years}` (`25`), `{coupleNames}` and `{dates}`
+placeholders, for example `Celebrating {years} Wonderful Years Together`.
+Text wraps and shrinks automatically on a CanvasTexture within the cream strip,
+clear of the banner's floral borders. It supports up to six lines / 500 text
+characters. `textColor` defaults to dark gold-brown (`#744326`). Runtime changes
+to the message, names, number, dates or color reuse the text texture without
+restarting the rings.
+
+`size` scales the composition (0.15–3). `ringSize` controls the individual ring
+width (0.15–0.9), with the final pair and heart sized proportionally.
+`bannerSize` controls banner width (0.5–1.8, default 1.4). Dimensions are relative
+to the effect's scaled picture width; texture proportions remain intact.
+`offsetX` accepts −3 to 3 picture widths, while `offsetY` accepts 0 to 3 widths
+upward, clamping negative values to zero. Layout recomputes its spacing to keep
+the banner and joined rings above the image. `duration` (0.5–60s) rescales all
+phases, and `speed` (0.1–3) multiplies the rate; changing either preserves the
+current phase. Animation advances by elapsed seconds, independent of frame rate.
+
+`enableBanner: false` skips registry lookup and asset loading. The additional
+`bannerOptions.enabled` switch hides/resets this effect independently. Visibility
+flags `showMessage`, `showBurst`, `showHeart`, `showPetals`, `showOrbit` and
+`showSparkles` default to true and omit their artwork or generated particles when
+disabled. Entry options override response options. Tracking loss hides and resets
+the sequence; detection replays it, and duplicate found events do not restart it.
+The app's existing target-geometry updates resize the animation as tracking
+dimensions become available.
+
+All eight optimized WebPs keep their exact filenames and alpha under
+`src/animations/golden-rings-anniversary/assets/`. Reference-counted texture leases
+share artwork between instances and release late loads on removal. GPU upload
+dimensions are capped at `maxTextureSize` (768 by default, 256–1024), with linear
+filtering and no mipmaps. Procedural sparkles, petals and small heart outlines
+use compact generated CanvasTextures and instanced planes, one draw per texture.
+`particleCount` accepts 0–80 (default 56), `petalCount` 0–40 (default 24), and
+`heartParticleCount` 0–24 (default 12). Idle animation reduces these to at most
+eight sparkles, four petals and six small hearts. `sparkleColor` customizes the
+procedural golden particles.
+
+For direct Three.js use, put the parent at the combined photo/video top center
+under the tracked target Object3D, with the protected rectangle extending down:
+
+```js
+const {GoldenRingsAnniversaryEffect} = require('./animations/golden-rings-anniversary')
+const effect = new GoldenRingsAnniversaryEffect({
+  THREE, document, parent: topAnchor,
+  width: pictureVideoBounds.width, pictureHeight: pictureVideoBounds.height,
+  anniversaryNumber: 25, coupleNames: 'Eswaran ❤️ Priya',
+  startDate: '09/12/2001', endDate: '09/12/2026',
+})
+await effect.load()
+effect.start()                // matching image target found; safe before load completes
+effect.update(deltaSeconds)  // existing AR render tick
+effect.reset()               // matching target lost; next start replays from zero
+effect.configure({message: 'Celebrating {years} Wonderful Years Together'})
+effect.seek(3.1)             // optional timeline preview in elapsed seconds
+effect.dispose()             // release artwork, generated textures and geometry
+```
+
+Call `load()` after changing feature flags, the asset base or texture resolution.
+The `magic-golden-rings-anniversary` component handles this automatically.
+`getAnniversaryPlacement()` supplies safe bounds and `getAnniversaryOptions()`
+filters configurable API fields. Code, timeline, text and texture helpers live
+together in `src/animations/golden-rings-anniversary/`. Physically verify tracking
+and visual performance on the deployment phone before release.
 
 ### Target confetti
 

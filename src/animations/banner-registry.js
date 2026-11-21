@@ -68,7 +68,15 @@ const BANNER_ANIMATIONS = Object.freeze({
       },
     }),
   }),
-  2: Object.freeze({}),
+  2: Object.freeze({
+    0: Object.freeze({
+      id: 'golden-rings-anniversary', component: 'magic-golden-rings-anniversary',
+      load: () => {
+        const {registerGoldenRingsAnniversaryEffect, getAnniversaryPlacement, getAnniversaryOptions} = require('./golden-rings-anniversary')
+        return {register: registerGoldenRingsAnniversaryEffect, getPlacement: getAnniversaryPlacement, getOptions: getAnniversaryOptions}
+      },
+    }),
+  }),
   3: Object.freeze({}),
   4: Object.freeze({}),
   5: Object.freeze({}),

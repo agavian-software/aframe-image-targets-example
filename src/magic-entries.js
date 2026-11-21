@@ -36,8 +36,10 @@ const getMagicEntries = (response) => {
         ? DEFAULT_LOVE_MESSAGE : defaultMessage
       const effectMessage = normalizeBannerDesignType(bannerType) === 1 && bannerDesignType === 2
         ? 'You Stole My Heart ❤️' : designMessage
+      const categoryMessage = normalizeBannerDesignType(bannerType) === 2 && bannerDesignType === 0
+        ? 'Happy Wedding Anniversary' : effectMessage
       const bannerMessage = item.bannerMessage ?? item.birthdayText ??
-        response.bannerMessage ?? response.birthdayText ?? effectMessage
+        response.bannerMessage ?? response.birthdayText ?? categoryMessage
       const bannerOptions = {...getBannerOptions(response.bannerOptions), ...getBannerOptions(item.bannerOptions)}
       return Object.assign({}, item, {
         shape, maskUrl, maskMode, enableConfetti, enableBanner, bannerType, bannerDesignType, bannerOptions,

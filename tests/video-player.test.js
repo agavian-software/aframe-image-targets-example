@@ -690,6 +690,39 @@ test('Cupid gates only its existing video surface, stays photo-centered and pres
   assert.equal(target.querySelector('.magic-cupid-reveal'), null)
 })
 
+test('anniversary rings use the top target bounds and leave the video visible through resizing and fullscreen', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'anniversary.mp4', enableBanner: true, enableConfetti: false,
+    bannerType: 2, bannerDesignType: 0, bannerOptions: {anniversaryNumber: 25, coupleNames: 'Eswaran ❤️ Priya',
+      startDate: '09/12/2001', endDate: '09/12/2026', ringSize: 0.45, width: 99, pictureHeight: 99}}])
+  const target = app.elements['magic-image-target'], rings = target.querySelector('.magic-golden-rings-anniversary')
+  assert.ok(rings)
+  assert.equal(target.querySelectorAll('.magic-banner-animation').length, 1)
+  const options = rings.attributes.get('magic-golden-rings-anniversary')
+  assert.equal(options.text, 'Happy Wedding Anniversary')
+  assert.equal(options.anniversaryNumber, 25); assert.equal(options.coupleNames, 'Eswaran ❤️ Priya')
+  assert.equal(options.startDate, '09/12/2001'); assert.equal(options.endDate, '09/12/2026')
+  assert.equal(options.width, 1.04); assert.equal(options.pictureHeight, 1.04)
+  assert.ok(rings.attributes.get('position').y >= 0.52)
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, undefined)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  assert.equal(rings.attributes.get('magic-golden-rings-anniversary').width, 2.08)
+  assert.ok(rings.object3D.position.y >= 1.04)
+  await app.elements.fullscreenToggle.emit('click'); await app.elements.videoBackToTarget.emit('click')
+  assert.equal(app.video.paused, false); assert.equal(app.video.playCalls, 1)
+  assert.equal(app.plane().attributes.has('magic-target-confetti'), false)
+  await app.video.emit('ended'); assert.equal(target.querySelector('.magic-golden-rings-anniversary'), null)
+})
+
+test('disabled anniversary banners skip registry lookup and leave video and confetti independent', async () => {
+  const app = createApp({resolveBannerAnimation() { assert.fail('Disabled anniversary must not resolve') }})
+  await app.start([{targetName: 'gift', videoUrl: 'anniversary.mp4', enableBanner: false, enableConfetti: true, bannerType: 2, bannerDesignType: 0}])
+  assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, undefined)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
+  assert.equal(app.video.paused, false)
+})
+
 test('disabled Cupid does not hide the video through either master or design flags', async () => {
   const app = createApp()
   await app.start([{targetName: 'gift', videoUrl: 'love.mp4', bannerType: 1, bannerDesignType: 2,
