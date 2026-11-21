@@ -123,6 +123,7 @@ Category `0` / design `2` selects balloons carrying a personalized name.
 Category `0` / design `3` selects the fairy with a magic wand.
 Category `0` / design `4` selects the interactive birthday cake.
 Category `1` / design `0` selects the magical ring proposal below the image.
+Category `1` / design `1` selects the flying love letter above the image.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -656,6 +657,123 @@ listeners and resources on teardown. `getProposalPlacement()` and
 the existing registry. Runtime tracking dimensions resize the effect through the
 same path used by the other designs. Physical camera tracking and mobile visual
 performance should still be checked on the deployment device.
+
+### Flying love letter (category 1, design 1)
+
+The `FlyingLoveLetterEffect` module renders directly in the existing tracked AR
+scene. It uses the app's A-Frame Three.js instance, camera, renderer and image
+target transform. Select it in a matched response or `videoUrlV1` entry:
+
+```json
+{
+  "enableBanner": true,
+  "bannerType": 1,
+  "bannerDesignType": 1,
+  "bannerMessage": "My Love ❤️\n\nEvery moment with you makes my life more beautiful.\n\nYou are my happiness, my favorite person and my forever.\n\nWill You Be Mine Forever? ❤️",
+  "bannerOptions": {
+    "recipientName": "Priya",
+    "senderName": "Aarav",
+    "entranceSide": "left",
+    "size": 1,
+    "offsetX": 0,
+    "offsetY": 0,
+    "duration": 9.5,
+    "speed": 1,
+    "allowRead": true,
+    "particleCount": 48,
+    "petalCount": 28
+  }
+}
+```
+
+The example message is the default when no message field is supplied for this
+design. An explicit empty message remains blank. Recipient and sender names are
+optional; when present, they add a salutation and sign-off. Entry options override
+response defaults. `enableBanner` remains the master switch before registry
+lookup or asset loading. `bannerOptions.enabled` independently hides and resets
+the letter. This category/design pair selects a single effect, leaving existing
+birthday designs, the ring proposal, video controls and confetti independent.
+
+The closed envelope follows a curved path from `entranceSide` (`left` or `right`)
+with a golden sparkle trail (0–2s). Two separate wing pivot groups attach behind
+it and flap continuously with independent rotations. It settles above the photo
+and crossfades to the open envelope (2–3.2s). The parchment rises and unfolds by
+revealing progressively more of the texture (3.2–5.5s), preserving the aspect of
+its visible artwork. The envelope back renders behind the letter; a second draw
+of only the lower front renders over the letter during emergence. Text appears
+line by line (5.5–8s), then the golden heart, supplied petal burst, individual
+falling petals, heart clusters and staggered fireworks celebrate (8–9.5s).
+The open envelope and letter then hover, with continued wing motion, occasional
+petals and at most ten golden sparkle sprites.
+
+The effect anchors at the **top of the combined printed-photo and video bounds**,
+including off-center crops and video overscan. All artwork is clipped below that
+edge in tracked coordinates, protecting the playing video throughout the flight,
+including large sizes and tilted targets. `offsetX` accepts −3 to 3 picture widths;
+`offsetY` accepts 0 to 3 widths upward, clamping negative values to zero. `size`
+scales the composition (0.15–3). `envelopeSize` (0.25–1), `letterSize` (0.4–1.5)
+and `wingSize` (0.15–0.8) control individual sprite widths. `duration` (0.5–60s)
+rescales the complete sequence and `speed` (0.1–3) multiplies its rate. Timing
+changes preserve the current phase; animation uses elapsed seconds, independent
+of frame rate. Position/size changes follow tracking through the existing resize
+path.
+
+`bannerMessage` is wrapped on a transparent CanvasTexture using Georgia with an
+emoji fallback. Names and `textColor` are configurable. The text fits inside the
+painted parchment, clear of its transparent margins and floral corners. The AR
+preview retains a fixed readable font size and up to 14 lines; long content ends
+with an invitation to continue in the reading view. The texture is redrawn only
+when another line appears or text settings change.
+
+After the parchment opens, tap its center to open the **complete letter** in a
+scrollable reading dialog with 20px text. This enlarged view uses plain text,
+preserves the entire message, and leaves the live AR renderer running. Close it
+with **Close** or Escape. The dialog restores focus, contains keyboard focus and
+closes on tracking loss, disable, scene pause, fullscreen video or teardown.
+`allowRead: false` disables enlargement and its tap hint. Raycasting uses the
+existing AR camera and renderer canvas, with pointer handling that rejects drags,
+multitouch, unrelated UI and inactive/fullscreen playback. Reading is available
+from 5.5s in canonical sequence time; it does not pause or seek the video.
+
+All twelve supplied WebPs live at
+`src/animations/flying-love-letter/assets/` with their exact filenames and alpha.
+`assets.js` shares reference-counted texture leases and limits GPU upload sizes
+to `maxTextureSize` (768 by default, 256–1024), with no mipmaps. Optional flags
+`showWings`, `showSeal`, `showHeart`, `showPetals`, `showFireworks`, `showHearts`
+and `showSparkles` skip their respective artwork when disabled. Instanced batches
+keep petals and sparkles to one draw per texture. `particleCount` accepts 0–72
+(default 48), and `petalCount` accepts 0–48 (default 28); idle rendering uses at
+most ten sparkles and four petals. The individual petal artwork supplies falling
+particles with varied velocity, rotation, flutter and gravity.
+
+For direct Three.js use, create a parent at the top center of the combined image
+and video bounds under the tracked target Object3D:
+
+```js
+const {FlyingLoveLetterEffect} = require('./animations/flying-love-letter')
+const effect = new FlyingLoveLetterEffect({
+  THREE, document, parent: topAnchor, width: pictureVideoBounds.width,
+  message: 'Forever yours ❤️', recipientName: 'Priya', senderName: 'Aarav',
+})
+await effect.load()
+effect.attachInteraction({element: renderer.domElement, getCamera: () => camera})
+effect.start()                // matching image target found; safe before load completes
+effect.update(deltaSeconds)  // each AR frame
+effect.reset()               // target lost; hide, close reader and reset for replay
+effect.configure({message: 'A new personal message', speed: 1.2})
+effect.seek(8.6)             // optional timeline preview, in elapsed seconds
+effect.openReader()         // optional programmatic enlargement after reveal
+effect.closeReader()
+effect.dispose()            // remove GPU resources, pointer listeners and reading dialog
+```
+
+Call `load()` after changing feature flags, the asset base or texture resolution.
+The `magic-love-letter` A-Frame component handles this automatically, filters
+tracking events by target name, ignores duplicate found events and resets on
+reacquisition. `getLoveLetterPlacement()` and `getLoveLetterOptions()` connect it
+to the existing registry. Code, timeline, text and reader helpers live together
+in `src/animations/flying-love-letter/`. Validate physical tracking and visual
+performance on the intended mobile device before deployment.
 
 ### Target confetti
 

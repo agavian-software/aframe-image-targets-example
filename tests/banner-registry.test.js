@@ -21,7 +21,7 @@ test('all seven categories are represented and unmapped pairs have no fallback',
   assert.deepEqual(Object.keys(BANNER_ANIMATIONS), ['0', '1', '2', '3', '4', '5', '6'])
   for (let category = 1; category <= 6; category++) {
     if (category !== 1) assert.equal(getBannerAnimation(category, 0), null)
-    assert.equal(getBannerAnimation(String(category), '1'), null)
+    if (category !== 1) assert.equal(getBannerAnimation(String(category), '1'), null)
   }
   for (const design of [5, 15, 100]) assert.equal(getBannerAnimation(0, design), null)
 })
@@ -33,6 +33,17 @@ test('category one / design zero selects the ring proposal without changing birt
   assert.equal(typeof definition.load().register, 'function')
   assert.equal(typeof definition.load().getPlacement, 'function')
   assert.equal(typeof definition.load().getOptions, 'function')
+  assert.equal(getBannerAnimation(0, 0).id, 'birthday-banner')
+})
+
+test('category one / design one selects the flying letter and preserves proposal and birthday effects', () => {
+  const definition = getBannerAnimation('1', '1')
+  assert.equal(definition.id, 'flying-love-letter')
+  assert.equal(definition.component, 'magic-love-letter')
+  assert.equal(typeof definition.load().register, 'function')
+  assert.equal(typeof definition.load().getPlacement, 'function')
+  assert.equal(typeof definition.load().getOptions, 'function')
+  assert.equal(getBannerAnimation(1, 0).id, 'magical-ring-proposal')
   assert.equal(getBannerAnimation(0, 0).id, 'birthday-banner')
 })
 

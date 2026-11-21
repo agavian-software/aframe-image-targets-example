@@ -52,6 +52,14 @@ const BANNER_ANIMATIONS = Object.freeze({
         return {register: registerMagicalRingProposalEffect, getPlacement: getProposalPlacement, getOptions: getProposalOptions}
       },
     }),
+    1: Object.freeze({
+      id: 'flying-love-letter',
+      component: 'magic-love-letter',
+      load: () => {
+        const {registerFlyingLoveLetterEffect, getLoveLetterPlacement, getLoveLetterOptions} = require('./flying-love-letter')
+        return {register: registerFlyingLoveLetterEffect, getPlacement: getLoveLetterPlacement, getOptions: getLoveLetterOptions}
+      },
+    }),
   }),
   2: Object.freeze({}),
   3: Object.freeze({}),

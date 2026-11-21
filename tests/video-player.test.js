@@ -633,6 +633,44 @@ test('ring proposal stays below the photo, resizes and leaves video playback ind
   assert.equal(target.querySelector('.magic-ring-proposal'), null)
 })
 
+test('love letter uses its own tracked child and preserves video, confetti, options and resizing', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: true,
+    enableConfetti: false, bannerType: 1, bannerDesignType: 1,
+    bannerOptions: {senderName: 'Aarav', recipientName: 'Priya', entranceSide: 'right', width: 99}}])
+  const target = app.elements['magic-image-target']
+  const letter = target.querySelector('.magic-love-letter')
+  assert.ok(letter)
+  assert.equal(target.querySelectorAll('.magic-banner-animation').length, 1)
+  assert.equal(target.querySelector('.magic-ring-proposal'), null)
+  const options = letter.attributes.get('magic-love-letter')
+  assert.ok(options.text.startsWith('My Love'))
+  assert.equal(options.recipientName, 'Priya')
+  assert.equal(options.senderName, 'Aarav')
+  assert.equal(options.entranceSide, 'right')
+  assert.equal(options.width, 1.04)
+  assert.ok(letter.attributes.get('position').y >= 0.52)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  assert.equal(letter.attributes.get('magic-love-letter').width, 2.08)
+  assert.ok(letter.object3D.position.y >= 1.04)
+  await app.elements.fullscreenToggle.emit('click')
+  await app.elements.videoBackToTarget.emit('click')
+  assert.equal(app.video.paused, false)
+  assert.equal(app.video.playCalls, 1)
+  assert.equal(app.plane().attributes.has('magic-target-confetti'), false)
+  await app.video.emit('ended')
+  assert.equal(target.querySelector('.magic-love-letter'), null)
+})
+
+test('disabled letters skip registry lookup and keep confetti independent', async () => {
+  const app = createApp({resolveBannerAnimation() { assert.fail('Disabled letters must not resolve') }})
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: false,
+    enableConfetti: true, bannerType: 1, bannerDesignType: 1}])
+  assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
+  assert.equal(app.video.paused, false)
+})
+
 test('disabled ring proposals skip registry lookup and preserve independent confetti', async () => {
   const app = createApp({resolveBannerAnimation() { assert.fail('Disabled proposals must not resolve') }})
   await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: false,

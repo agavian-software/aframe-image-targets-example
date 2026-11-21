@@ -1,4 +1,5 @@
 const {normalizeBannerDesignType} = require('./animations/banner-registry')
+const {DEFAULT_MESSAGE: DEFAULT_LOVE_MESSAGE} = require('./animations/flying-love-letter/text')
 const getBannerOptions = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 
 const getEffectEnabled = (value, fallback = true) => {
@@ -31,8 +32,10 @@ const getMagicEntries = (response) => {
       const bannerDesignType = normalizeBannerDesignType(item.bannerDesignType ?? response.bannerDesignType ?? 0)
       const defaultMessage = normalizeBannerDesignType(bannerType) === 1 && bannerDesignType === 0
         ? 'Will You Marry Me? ❤️' : 'Happy Birthday!'
+      const designMessage = normalizeBannerDesignType(bannerType) === 1 && bannerDesignType === 1
+        ? DEFAULT_LOVE_MESSAGE : defaultMessage
       const bannerMessage = item.bannerMessage ?? item.birthdayText ??
-        response.bannerMessage ?? response.birthdayText ?? defaultMessage
+        response.bannerMessage ?? response.birthdayText ?? designMessage
       const bannerOptions = {...getBannerOptions(response.bannerOptions), ...getBannerOptions(item.bannerOptions)}
       return Object.assign({}, item, {
         shape, maskUrl, maskMode, enableConfetti, enableBanner, bannerType, bannerDesignType, bannerOptions,
