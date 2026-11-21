@@ -606,6 +606,42 @@ test('interactive cake receives options below the picture and preserves video co
   assert.equal(target.querySelector('.magic-birthday-cake'), null)
 })
 
+test('ring proposal stays below the photo, resizes and leaves video playback independent', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: true,
+    enableConfetti: false, bannerType: 1, bannerDesignType: 0,
+    bannerOptions: {coupleNames: 'Aarav & Priya', duration: 8, width: 99, pictureHeight: 99}}])
+  const target = app.elements['magic-image-target']
+  const proposal = target.querySelector('.magic-ring-proposal')
+  assert.ok(proposal)
+  assert.equal(target.querySelectorAll('.magic-banner-animation').length, 1)
+  const options = proposal.attributes.get('magic-ring-proposal')
+  assert.equal(options.text, 'Will You Marry Me? ❤️')
+  assert.equal(options.coupleNames, 'Aarav & Priya')
+  assert.equal(options.width, 1.04)
+  assert.equal(options.pictureHeight, 1.04)
+  assert.ok(proposal.attributes.get('position').y <= -0.52)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  assert.equal(proposal.attributes.get('magic-ring-proposal').width, 2.08)
+  assert.ok(proposal.object3D.position.y <= -1.04)
+  await app.elements.fullscreenToggle.emit('click')
+  await app.elements.videoBackToTarget.emit('click')
+  assert.equal(app.video.paused, false)
+  assert.equal(app.video.playCalls, 1)
+  assert.equal(app.plane().attributes.has('magic-target-confetti'), false)
+  await app.video.emit('ended')
+  assert.equal(target.querySelector('.magic-ring-proposal'), null)
+})
+
+test('disabled ring proposals skip registry lookup and preserve independent confetti', async () => {
+  const app = createApp({resolveBannerAnimation() { assert.fail('Disabled proposals must not resolve') }})
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: false,
+    enableConfetti: true, bannerType: 1, bannerDesignType: 0}])
+  assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
+  assert.equal(app.video.paused, false)
+})
+
 test('enableBanner is checked before resolving interactive cake assets', async () => {
   const app = createApp({resolveBannerAnimation() { assert.fail('Disabled cakes must not resolve') }})
   await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: false,

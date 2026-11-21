@@ -122,6 +122,7 @@ category `0` / design `1` selects the magical gift box below the image.
 Category `0` / design `2` selects balloons carrying a personalized name.
 Category `0` / design `3` selects the fairy with a magic wand.
 Category `0` / design `4` selects the interactive birthday cake.
+Category `1` / design `0` selects the magical ring proposal below the image.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -554,6 +555,107 @@ without stopping video. `dispose()` releases hit geometry/materials, sprite batc
 generated textures, cached artwork leases, alpha data, and event listeners,
 including pending loads. This implementation uses tap interaction; microphone
 blowing is not enabled.
+
+### Magical ring proposal (category 1, design 0)
+
+Select the proposal in a matched API response or an individual `videoUrlV1` entry:
+
+```json
+{
+  "enableBanner": true,
+  "bannerType": 1,
+  "bannerDesignType": 0,
+  "bannerMessage": "Will You Marry Me? ❤️",
+  "bannerOptions": {
+    "coupleNames": "Aarav & Priya",
+    "size": 1,
+    "offsetX": 0,
+    "offsetY": 0,
+    "duration": 8,
+    "speed": 1,
+    "particleCount": 64,
+    "petalCount": 32
+  }
+}
+```
+
+For this design, omitted text defaults to `Will You Marry Me? ❤️`. An explicit
+empty `bannerMessage` stays empty; `coupleNames` is an independently optional
+second line. Entry options override response options. `enableBanner` remains the
+master switch before registry lookup or artwork loading; `bannerOptions.enabled`
+also hides and resets the proposal. Video and existing confetti keep their own
+controls, and only one banner design is instantiated per target.
+
+The closed box emerges downward from the bottom edge with a gentle overshoot
+(0–1.5s). The two complete box sprites crossfade with a small scale change to
+suggest opening, then the separate ring rises (1.5–3s). Golden particles orbit
+the ring and settle into a heart as the supplied heart artwork fades and expands
+(3–4.5s). The message banner appears above the ring (4.5–6s), followed by the
+supplied petal burst, two staggered fireworks, floating heart clusters and
+individual petals with gravity, flutter and varied spin (6–8s, with a short
+petal fade tail). The final open box, hovering ring, heart and banner remain;
+heart clusters bob gently and at most ten golden glints twinkle. Ring rotation
+stays in the image plane, with subtle uniform scaling instead of a 3D turn.
+
+The composition anchors to the **bottom of the union of the full printed photo
+and video surface**, including crop offsets, shapes and overscan. The banner,
+ring and box stack entirely below that edge. A shader clips everything above the
+bottom edge in the tracked anchor's coordinates, including during the entrance,
+so the decoration cannot paint over the photo or video even on a tilted target.
+`offsetY` accepts only downward movement (−3 to 0 picture widths); positive
+values clamp to zero. `offsetX` accepts −3 to 3 picture widths. `size` scales the
+entire composition (0.15–3); `boxSize` (0.15–0.9), `ringSize` (0.1–0.6), and
+`bannerSize` (0.4–1.5) control individual widths relative to the scaled
+composition. Layout recomputes spacing to preserve clearance. Image planes retain
+their texture proportions. The individual procedural petals flutter separately.
+
+`duration` (0.5–60 seconds) rescales all phases, and `speed` (0.1–3) multiplies
+the rate. Changing these during playback preserves the current phase. Optional
+flags `showMessage`, `showHeart`, `showPetals`, `showFireworks`, `showHearts` and
+`showSparkles` default to true. `textColor` and `sparkleColor` customize colors.
+The message and names wrap and shrink inside a separate CanvasTexture; text
+changes reuse that texture without restarting the animation.
+
+The reusable module lives in
+`src/animations/magical-ring-proposal/MagicalRingProposalEffect.js`, with its
+A-Frame adapter in `index.js` (`magic-ring-proposal`), pure timeline/layout in
+`timeline.js`, text rendering in `text.js`, and texture leases in `assets.js`.
+All eight supplied `.webp` files are bundled under this module's `assets/`
+directory with their exact filenames and transparency. Disabled features skip
+their artwork downloads. Leases share textures between instances, cap upload
+dimensions at `maxTextureSize` (768 by default, 256–1024), and disable mipmaps.
+Instanced planes batch each particle texture into one draw call: up to 96 golden
+sparkles and 48 falling petals, with 64 and 32 by default. Petal particles use a
+small generated texture alongside the supplied complete burst artwork.
+
+For direct Three.js integration, create a parent at the tracked picture/video
+bottom center, keeping it under the tracked target Object3D:
+
+```js
+const {MagicalRingProposalEffect} = require('./animations/magical-ring-proposal')
+const effect = new MagicalRingProposalEffect({
+  THREE, document, parent: bottomAnchor,
+  width: pictureVideoBounds.width,
+  message: 'Will You Marry Me? ❤️',
+  coupleNames: 'Aarav & Priya',
+})
+await effect.load()
+effect.start()                // matching target found (also safe before load resolves)
+effect.update(deltaSeconds)  // each render frame
+effect.reset()               // matching target lost; next start replays from zero
+effect.configure({message: 'Forever starts here ❤️'})
+effect.seek(6.5)             // optional timeline preview, in elapsed seconds
+effect.dispose()             // when removing the effect
+```
+
+Call `load()` after `configure()` when changing feature flags, the asset base or
+texture resolution. The A-Frame adapter handles this automatically, filters events
+by target name, ignores duplicate found events, resets on loss and removes its
+listeners and resources on teardown. `getProposalPlacement()` and
+`getProposalOptions()` supply safe bounds and configurable API options through
+the existing registry. Runtime tracking dimensions resize the effect through the
+same path used by the other designs. Physical camera tracking and mobile visual
+performance should still be checked on the deployment device.
 
 ### Target confetti
 

@@ -43,7 +43,16 @@ const BANNER_ANIMATIONS = Object.freeze({
       },
     }),
   }),
-  1: Object.freeze({}),
+  1: Object.freeze({
+    0: Object.freeze({
+      id: 'magical-ring-proposal',
+      component: 'magic-ring-proposal',
+      load: () => {
+        const {registerMagicalRingProposalEffect, getProposalPlacement, getProposalOptions} = require('./magical-ring-proposal')
+        return {register: registerMagicalRingProposalEffect, getPlacement: getProposalPlacement, getOptions: getProposalOptions}
+      },
+    }),
+  }),
   2: Object.freeze({}),
   3: Object.freeze({}),
   4: Object.freeze({}),

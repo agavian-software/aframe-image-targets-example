@@ -25,12 +25,14 @@ const getMagicEntries = (response) => {
         response.maskUrl || response.customShapeUrl || responseCustom.customShapeUrl || ''
       const maskMode = item.maskMode || custom.maskMode || response.maskMode ||
         responseCustom.maskMode || 'auto'
-      const bannerMessage = item.bannerMessage ?? item.birthdayText ??
-        response.bannerMessage ?? response.birthdayText ?? 'Happy Birthday!'
       const enableConfetti = getEffectEnabled(item.enableConfetti ?? response.enableConfetti)
       const enableBanner = getEffectEnabled(item.enableBanner ?? response.enableBanner)
       const bannerType = String(item.bannerType ?? response.bannerType ?? 0).trim()
       const bannerDesignType = normalizeBannerDesignType(item.bannerDesignType ?? response.bannerDesignType ?? 0)
+      const defaultMessage = normalizeBannerDesignType(bannerType) === 1 && bannerDesignType === 0
+        ? 'Will You Marry Me? ❤️' : 'Happy Birthday!'
+      const bannerMessage = item.bannerMessage ?? item.birthdayText ??
+        response.bannerMessage ?? response.birthdayText ?? defaultMessage
       const bannerOptions = {...getBannerOptions(response.bannerOptions), ...getBannerOptions(item.bannerOptions)}
       return Object.assign({}, item, {
         shape, maskUrl, maskMode, enableConfetti, enableBanner, bannerType, bannerDesignType, bannerOptions,

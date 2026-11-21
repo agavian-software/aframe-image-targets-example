@@ -20,10 +20,20 @@ test('category zero / design zero selects the existing birthday animation', () =
 test('all seven categories are represented and unmapped pairs have no fallback', () => {
   assert.deepEqual(Object.keys(BANNER_ANIMATIONS), ['0', '1', '2', '3', '4', '5', '6'])
   for (let category = 1; category <= 6; category++) {
-    assert.equal(getBannerAnimation(category, 0), null)
+    if (category !== 1) assert.equal(getBannerAnimation(category, 0), null)
     assert.equal(getBannerAnimation(String(category), '1'), null)
   }
   for (const design of [5, 15, 100]) assert.equal(getBannerAnimation(0, design), null)
+})
+
+test('category one / design zero selects the ring proposal without changing birthday designs', () => {
+  const definition = getBannerAnimation('1', '0')
+  assert.equal(definition.id, 'magical-ring-proposal')
+  assert.equal(definition.component, 'magic-ring-proposal')
+  assert.equal(typeof definition.load().register, 'function')
+  assert.equal(typeof definition.load().getPlacement, 'function')
+  assert.equal(typeof definition.load().getOptions, 'function')
+  assert.equal(getBannerAnimation(0, 0).id, 'birthday-banner')
 })
 
 test('category zero / design one selects the gift without changing the original design', () => {
