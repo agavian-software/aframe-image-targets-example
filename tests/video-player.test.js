@@ -424,7 +424,7 @@ test('backend flags independently control decorations through resizing, tracking
 test('unmapped or invalid category/design pairs keep video playing without a banner', async () => {
   const pairs = [
     ...[1, 2, 3, 4, 5, 6, '1', '6', -1, 7, 'invalid'].map(bannerType => [bannerType, 0]),
-    ...[4, '4', 12, -1, 0.5, 'invalid', '', true].map(bannerDesignType => [0, bannerDesignType]),
+    ...[5, '5', 12, -1, 0.5, 'invalid', '', true].map(bannerDesignType => [0, bannerDesignType]),
   ]
   for (const [bannerType, bannerDesignType] of pairs) {
     const app = createApp()
@@ -441,7 +441,7 @@ test('unmapped or invalid category/design pairs keep video playing without a ban
 test('response selection defaults and entry design overrides decide each targets banner', async () => {
   const app = createApp()
   await app.window.emit('imageidentified', {
-    bannerType: 0, bannerDesignType: 4,
+    bannerType: 0, bannerDesignType: 5,
     videoUrlV1: [
       {targetName: 'gift', videoUrl: 'one.mp4'},
       {targetName: 'second', videoUrl: 'two.mp4', bannerDesignType: '0'},
@@ -579,6 +579,40 @@ test('fairy bounds resize while video controls and all other designs keep their 
   assert.equal(app.video.playCalls, 1)
   await app.video.emit('ended')
   assert.equal(target.querySelector('.magic-fairy-wand'), null)
+})
+
+test('interactive cake receives options below the picture and preserves video controls', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: true,
+    enableConfetti: false, bannerType: 0, bannerDesignType: 4, bannerMessage: 'Happy Birthday Priya',
+    bannerOptions: {candleCount: 7, name: 'Priya', speed: 1.2, width: 99}}])
+  const target = app.elements['magic-image-target']
+  const cake = target.querySelector('.magic-birthday-cake')
+  assert.ok(cake)
+  for (const other of ['.magic-birthday-banner', '.magic-gift-box', '.magic-balloon-name', '.magic-fairy-wand']) assert.equal(target.querySelector(other), null)
+  assert.equal(cake.attributes.get('magic-birthday-cake').text, 'Happy Birthday Priya')
+  assert.equal(cake.attributes.get('magic-birthday-cake').candleCount, 7)
+  assert.equal(cake.attributes.get('magic-birthday-cake').width, 1.04)
+  assert.ok(cake.attributes.get('position').y <= -0.52)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  assert.equal(cake.attributes.get('magic-birthday-cake').width, 2.08)
+  assert.equal(cake.attributes.get('magic-birthday-cake').candleCount, 7)
+  assert.ok(cake.object3D.position.y <= -1.04)
+  await app.elements.fullscreenToggle.emit('click')
+  await app.elements.videoBackToTarget.emit('click')
+  assert.equal(app.video.paused, false)
+  assert.equal(app.video.playCalls, 1)
+  await app.video.emit('ended')
+  assert.equal(target.querySelector('.magic-birthday-cake'), null)
+})
+
+test('enableBanner is checked before resolving interactive cake assets', async () => {
+  const app = createApp({resolveBannerAnimation() { assert.fail('Disabled cakes must not resolve') }})
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: false,
+    enableConfetti: true, bannerType: 0, bannerDesignType: 4}])
+  assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
+  assert.equal(app.video.paused, false)
 })
 
 test('enableBanner is checked before resolving the fairy or loading its artwork', async () => {

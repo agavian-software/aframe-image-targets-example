@@ -121,6 +121,7 @@ and defaults to `0`. Category `0` / design `0` selects this flying-baby banner;
 category `0` / design `1` selects the magical gift box below the image.
 Category `0` / design `2` selects balloons carrying a personalized name.
 Category `0` / design `3` selects the fairy with a magic wand.
+Category `0` / design `4` selects the interactive birthday cake.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -164,6 +165,14 @@ src/animations/
     assets/        # Nine supplied WebP images
   shared/
     sprite-batch.js # Instanced sprites and video-area clipping
+  interactive-birthday-cake/
+    index.js       # A-Frame adapter and bottom-edge placement
+    InteractiveBirthdayCakeEffect.js # Reusable Three.js effect and raycasting
+    timeline.js    # Lighting, extinguishing state, smoke, celebration
+    interaction.js # Single-pointer tap filtering and listener cleanup
+    text.js        # Dynamic birthday message and tap hint
+    assets.js      # Selective shared WebP texture loading
+    assets/        # Eleven supplied WebP images
 ```
 
 The PNGs retain their exact filenames and proportions. Webpack copies animation
@@ -441,6 +450,110 @@ new images or procedural features. `seek(seconds)` supports previews. Geometry,
 materials, generated textures, shared artwork leases, and adapter tracking
 listeners are released on removal, including pending asset loads. Load failures
 emit `fairymagicerror` on the decoration entity while video continues.
+
+### Interactive birthday cake (category 0 / design 4)
+
+```json
+{
+  "targetName": "gift",
+  "videoUrl": "videos/gift.mp4",
+  "enableBanner": true,
+  "bannerType": 0,
+  "bannerDesignType": 4,
+  "bannerMessage": "Happy Birthday\nPriya",
+  "bannerOptions": {
+    "name": "Priya",
+    "candleCount": 5,
+    "duration": 5,
+    "speed": 1,
+    "size": 1,
+    "offsetX": 0,
+    "offsetY": 0.025,
+    "textColor": "#783a32",
+    "sparkleColor": "#ffd777",
+    "cakeTint": "#ffffff",
+    "showHint": true,
+    "showMessage": true,
+    "showCelebration": true,
+    "showParticles": true,
+    "particleCount": 64,
+    "maxTextureSize": 768
+  }
+}
+```
+
+The cake emerges from behind the picture's bottom edge and moves down with smooth
+scaling and a small bounce (0-1.5s). Independent candles light sequentially
+(1.5-2.5s), then the effect waits for interaction with a **Tap to Blow Candles**
+hint. Tap a candle to extinguish only that candle, fade its flame/glow, switch to
+the off sprite, and release rising smoke. Tap the visible cake body to extinguish
+every remaining candle. Tapping a candle that is already off consumes that hit
+without triggering the cake underneath. No celebration starts until the last
+candle is extinguished.
+
+The celebration combines golden fireworks, colorful confetti, hearts, balloons,
+the sparkle ring, and real-time particles. About 1.1 seconds after the final blow,
+the personalized ribbon begins its scale-and-fade reveal above the cake. Temporary
+celebration layers fade out, leaving the cake, extinguished candles, message,
+gentle floating, and occasional sparkles. The waiting stage has no timeout;
+`duration` (0.5-60) rescales the animation phases and `speed` (0.1-3) multiplies the
+rate, including lighting, flame animation, smoke, and celebration. Changing timing
+at runtime preserves the current phase.
+
+`candleCount` defaults to five and accepts 1-12. Each candle has its own narrow
+Three.js mesh hit target. Raycasting checks candles first, then the cake body;
+the cake's alpha map rejects taps on transparent corners. There is no shader-only
+sprite raycast: invisible ordinary mesh hit planes follow the rendered cake and
+candle transforms. Only one primary pointer-up can trigger a candle. Drags over
+10 CSS pixels, long holds, multitouch, canceled pointers, interface buttons,
+webpage/fullscreen video playback, and untracked or disabled effects are ignored.
+Synthetic click events do not duplicate a pointer tap. All tap listeners are
+removed when the effect is disposed. Interaction starts after lighting completes.
+
+The cake is anchored below both the full printed picture and enlarged video,
+including off-center tracking crops. Every decoration fragment is clipped at the
+picture's bottom edge, so custom positions and the entrance cannot cover the AR
+video. `size` scales the arrangement (0.15-3); offsets use picture-width units,
+with positive X moving right and positive Y moving down. Candle hit targets use
+the same transforms and clipping boundary, including on tilted targets.
+
+All eleven source WebP filenames are retained. Shared, reference-counted texture
+leases load only the selected effect and skip celebration or message images when
+their features are disabled. Texture upload dimensions are capped at 768 pixels
+by default (configurable 256-1024), with no mipmaps. Lit/off candle images share the
+same canvas dimensions. Because the lit image already includes a flame, only its
+wax/neck portion is rendered; the separate flame texture supplies the animated
+flame and glow, avoiding double flames. Candle copies share textures and instanced
+draws. Real-time particles use one generated texture and one draw, capped at 96
+(64 by default); at most eight glint in the final state.
+
+`bannerMessage` supplies the ribbon text and preserves an explicit blank message.
+When the message is the legacy default `Happy Birthday!`, `bannerOptions.name`
+personalizes it as `Happy Birthday <name>`. Text wraps and scales on a CanvasTexture
+without editing any artwork. The `enableBanner` master switch still runs before
+design lookup or loading. Existing designs 0-3, video controls, tracking, and
+independent confetti retain their existing behavior. Tracking loss hides the cake,
+clears gestures, relights the state on replay, and resets the celebration.
+
+For direct Three.js use, construct `InteractiveBirthdayCakeEffect` with
+`{THREE, document, parent, width, message, name, candleCount, ...options}` where
+`parent` is the tracked Object3D at the picture's bottom edge. Call `load()`,
+`start()`, `update(deltaSeconds)`, and `reset()` on tracking loss. Attach taps with
+`attachInteraction({element: renderer.domElement, getCamera: () => camera, allowed})`,
+or call `handleTap(clientX, clientY, camera, canvasRect)` from an existing input
+controller. `blowCandle(index)` and `blowAllCandles()` are also available after
+lighting. `configure()` updates timing, position, count, colors, text, and enabled
+state; call `load()` afterward if visibility or texture settings change. Changing
+the candle count starts a new sequence. `seek(seconds)` supports previewing time
+without automatically blowing candles.
+
+Optional `onCandleBlown({index, remaining})` and `onCelebrate({candleCount})`
+callbacks are available on the class. The adapter emits `cakecandleblown` and
+`cakecelebration` on its decoration entity. Load errors emit `birthdaycakeerror`
+without stopping video. `dispose()` releases hit geometry/materials, sprite batches,
+generated textures, cached artwork leases, alpha data, and event listeners,
+including pending loads. This implementation uses tap interaction; microphone
+blowing is not enabled.
 
 ### Target confetti
 

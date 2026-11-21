@@ -34,6 +34,14 @@ const BANNER_ANIMATIONS = Object.freeze({
         return {register: registerFairyMagicWandEffect, getPlacement: getFairyPlacement, getOptions: getFairyOptions}
       },
     }),
+    4: Object.freeze({
+      id: 'interactive-birthday-cake',
+      component: 'magic-birthday-cake',
+      load: () => {
+        const {registerInteractiveBirthdayCakeEffect, getCakePlacement, getCakeOptions} = require('./interactive-birthday-cake')
+        return {register: registerInteractiveBirthdayCakeEffect, getPlacement: getCakePlacement, getOptions: getCakeOptions}
+      },
+    }),
   }),
   1: Object.freeze({}),
   2: Object.freeze({}),
