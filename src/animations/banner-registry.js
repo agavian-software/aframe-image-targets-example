@@ -60,6 +60,13 @@ const BANNER_ANIMATIONS = Object.freeze({
         return {register: registerFlyingLoveLetterEffect, getPlacement: getLoveLetterPlacement, getOptions: getLoveLetterOptions}
       },
     }),
+    2: Object.freeze({
+      id: 'cupid-heart-reveal', component: 'magic-cupid-reveal', revealsVideo: true,
+      load: () => {
+        const {registerCupidHeartRevealEffect, getCupidPlacement, getCupidOptions, getInitialVideoOpacity} = require('./cupid-heart-reveal')
+        return {register: registerCupidHeartRevealEffect, getPlacement: getCupidPlacement, getOptions: getCupidOptions, getInitialVideoOpacity}
+      },
+    }),
   }),
   2: Object.freeze({}),
   3: Object.freeze({}),

@@ -124,6 +124,7 @@ Category `0` / design `3` selects the fairy with a magic wand.
 Category `0` / design `4` selects the interactive birthday cake.
 Category `1` / design `0` selects the magical ring proposal below the image.
 Category `1` / design `1` selects the flying love letter above the image.
+Category `1` / design `2` selects Cupid's heart break and video reveal.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -774,6 +775,129 @@ reacquisition. `getLoveLetterPlacement()` and `getLoveLetterOptions()` connect i
 to the existing registry. Code, timeline, text and reader helpers live together
 in `src/animations/flying-love-letter/`. Validate physical tracking and visual
 performance on the intended mobile device before deployment.
+
+### Cupid heart break and video reveal (category 1, design 2)
+
+`CupidHeartRevealEffect` uses the existing tracked target, Three.js instance,
+camera, renderer and video surface. Select the next romantic design in a matched
+response or an individual `videoUrlV1` entry:
+
+```json
+{
+  "enableBanner": true,
+  "enableConfetti": false,
+  "bannerType": 1,
+  "bannerDesignType": 2,
+  "bannerMessage": "You Stole My Heart ❤️",
+  "bannerOptions": {
+    "size": 1,
+    "cupidSize": 0.52,
+    "cupidX": -0.82,
+    "cupidY": 0.48,
+    "arrowSpeed": 1,
+    "breakDuration": 1,
+    "speed": 1,
+    "showMessage": true
+  }
+}
+```
+
+With the default timing, Cupid enters along a curved path from the upper left
+while a red heart appears at the full printed photo's center (0–2s). He aims
+(2–3s), releases the separate arrow with its golden motion trail (3–3.5s), and
+hits the heart's center. Impact flashes, shake and the cracked-heart pose follow
+(3.5–4s). Splitting/shattering artwork transitions to two rotating, moving halves
+and smaller fragments (4–5s). **The existing video stays at opacity zero until
+the break starts at 4s, then smoothly fades to full visibility by 5s.** Heart
+pieces and fragments disappear completely at reveal completion. Cupid celebrates
+and flies away while petals, rings, glowing outlines, sparkles and the optional
+banner surround the playing video (5–7s). The banner and subtle decorations stay.
+
+This changes the visibility of the current video material. It does not create a
+second video, pause playback, seek it, or alter sound, camera capture, fullscreen
+controls or the scanner. Playback time and audio continue through the intro under
+the app's existing playback rules. The plane's usual tracked visibility still
+belongs to the playback controller. The new `revealOpacity` control in
+`magic-target-video-cover` multiplies mask readiness, so asynchronous mask loads,
+metadata changes and target resizing cannot reveal the video early or discard
+its current fade progress. All other designs retain full opacity by default.
+
+The registry marks this design with `revealsVideo: true` and initializes the gate
+before creating the decoration, preventing an exposed frame while assets load.
+`enableBanner: false` skips the design and its gate entirely. Setting
+`bannerOptions.enabled: false` also leaves the video visible. Tracking loss hides
+and resets the animation and closes the gate; reacquisition replays from zero.
+Duplicate found events do not restart it. Disabling/removing the effect restores
+the video's normal opacity. Artwork failures emit `cupidrevealerror` and restore
+visibility rather than leaving playback hidden; a subsequent detection can retry.
+
+The effect is centered on the full printed photo, including original-image crop
+offsets. Cupid, the bow launch point, the arrow's **visible tip**, the heart and
+fragments all use the same target-local coordinate system. Moving or tilting the
+phone therefore preserves the arrow's hit at `(0, 0)`. The heart's halves travel
+beyond the combined photo/video bounds with room for their rotated diagonals.
+Celebration materials clip inside those bounds so the final video is unobstructed,
+including shaped or oversized video surfaces. The four Cupid pose sprites already
+include wings; no duplicate wings or independent wing rig are added. The release
+pose crops the nocked heart tip while the separate projectile is in flight.
+
+`size` (0.15–2.5) scales the principal artwork and banner. `heartSize` (0.35–1.5)
+is relative to the picture's shorter dimension, keeping its center fixed.
+`cupidSize` (0.2–1) is relative to picture width. `cupidX` and `cupidY` (−3 to 3)
+position the settled Cupid in picture-width units; a position at the heart center
+is moved safely aside. `arrowSpeed` (0.25–4) scales the 0.5s arrow flight, and
+`breakDuration` (0.25–4s) controls separation and the matching video fade. Impact,
+cracking and celebration shift with these settings; the gate always waits for
+the actual break. `speed` (0.1–3) multiplies elapsed time for the complete sequence.
+Changing speed preserves sequence time. Changing arrow speed or break duration
+restarts the sequence so a new hit and reveal stay synchronized.
+
+`bannerMessage` defaults to `You Stole My Heart ❤️`; an explicit blank remains
+blank. Text wraps on a CanvasTexture over the supplied red banner below the
+photo. `textColor` customizes its color and `showMessage: false` omits it. Optional
+flags `showPetals`, `showRing`, `showHearts` and `showSparkles` skip those images.
+Entry options override response defaults. One banner design is selected per
+target, preserving the existing birthday, proposal and love-letter effects.
+The separate `enableConfetti` setting remains independent.
+
+All 22 supplied WebPs retain their exact filenames and transparency under
+`src/animations/cupid-heart-reveal/assets/`. Shared texture leases cap GPU upload
+dimensions at `maxTextureSize` (768 by default, 256–1024), disable mipmaps, and
+release late loads after teardown. Instanced particles use one draw per texture:
+`particleCount` 0–72 (default 40), `petalCount` 0–40 (default 20), and
+`fragmentCount` 0–32 (default 20). Idle rendering reduces sparkles to ten and
+petals to four. Effects advance from the existing A-Frame tick; no render loop,
+renderer, AR camera or tracking session is created.
+
+For direct Three.js use, put the parent at the photo center under the existing
+tracked target. Supply combined photo/video bounds in that parent's coordinates:
+
+```js
+const {CupidHeartRevealEffect} = require('./animations/cupid-heart-reveal')
+const effect = new CupidHeartRevealEffect({
+  THREE, document, parent: pictureCenterAnchor,
+  width: pictureWidth, pictureHeight,
+  boundsLeft, boundsRight, boundsBottom, boundsTop,
+  message: 'You Stole My Heart ❤️',
+  onVideoOpacity: opacity => existingVideoCover.setRevealOpacity(opacity),
+})
+await effect.load()
+effect.start()                // matching target found; also safe before load resolves
+effect.update(deltaSeconds)  // existing AR render tick
+effect.reset()               // matching target lost; hide and prepare replay
+effect.configure({message: 'Always yours ❤️'})
+effect.seek(4.5)             // optional timeline preview, in elapsed seconds
+effect.dispose()             // release resources and restore normal video opacity
+```
+
+Initialize the video surface with `revealOpacity: 0` before making it visible.
+`getCupidPlacement()` supplies the center and safe bounds; `getCupidOptions()`
+filters API options. The `magic-cupid-reveal` component and registry perform all
+of this automatically for the existing app. Call `load()` after changing feature
+flags, the asset base or texture size in standalone integrations. Code, pure
+timeline, texture leases and text helpers live together in
+`src/animations/cupid-heart-reveal/`. Verify physical tracking and visual
+performance on the deployment phone before release.
 
 ### Target confetti
 

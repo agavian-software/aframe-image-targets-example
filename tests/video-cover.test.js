@@ -150,3 +150,39 @@ test('backend SquareMask portrait canvas is not squeezed into a square during pl
   assert.equal(component.videoTexture.repeat.x, repeatX)
   component.remove()
 })
+
+test('reveal opacity composes with async masks, resizing and decoded metadata without exposing video early', async () => {
+  const {component, video} = createComponent({shape: 'circle', revealOpacity: 0})
+  assert.equal(component.material.opacity, 0)
+  await Promise.resolve()
+  assert.equal(component.material.opacity, 0, 'mask completion cannot reveal the video')
+  component.setRevealOpacity(0.4)
+  assert.equal(component.material.opacity, 0.4)
+  const geometry = component.mesh.geometry, texture = component.videoTexture
+  component.setRevealOpacity(0.6)
+  assert.equal(component.mesh.geometry, geometry)
+  assert.equal(component.videoTexture, texture)
+  const oldData = {...component.data}
+  component.data.width = 2.5
+  component.update(oldData)
+  assert.equal(component.material.opacity, 0, 'wait for the replacement mask')
+  await Promise.resolve()
+  assert.equal(component.material.opacity, 0.6, 'resize preserves the runtime reveal gate')
+  video.videoWidth = 1920; video.videoHeight = 1080; video.emit('loadedmetadata')
+  assert.equal(component.material.opacity, 0.6)
+  component.setRevealOpacity(1); assert.equal(component.material.opacity, 1)
+  component.setRevealOpacity(0); assert.equal(component.material.opacity, 0)
+  component.remove()
+})
+
+test('unmasked videos support reveal opacity and preserve the normal visible default', () => {
+  const {component} = createComponent({revealOpacity: 0})
+  assert.equal(component.material.opacity, 0)
+  component.setRevealOpacity(0.5); assert.equal(component.material.opacity, 0.5)
+  component.setRevealOpacity(9); assert.equal(component.material.opacity, 1)
+  component.setRevealOpacity(-1); assert.equal(component.material.opacity, 0)
+  component.remove()
+  const normal = createComponent({})
+  assert.equal(normal.component.material.opacity, 1)
+  normal.component.remove()
+})

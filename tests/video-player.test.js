@@ -662,6 +662,45 @@ test('love letter uses its own tracked child and preserves video, confetti, opti
   assert.equal(target.querySelector('.magic-love-letter'), null)
 })
 
+test('Cupid gates only its existing video surface, stays photo-centered and preserves video controls', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'love.mp4', enableBanner: true,
+    enableConfetti: false, bannerType: 1, bannerDesignType: 2,
+    bannerOptions: {cupidX: -0.9, arrowSpeed: 1.2, breakDuration: 1.5, width: 99}}])
+  const target = app.elements['magic-image-target'], cupid = target.querySelector('.magic-cupid-reveal')
+  assert.ok(cupid)
+  assert.equal(target.querySelectorAll('.magic-banner-animation').length, 1)
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 0)
+  assert.equal(cupid.attributes.get('position').x, 0)
+  assert.equal(cupid.attributes.get('position').y, 0)
+  const options = cupid.attributes.get('magic-cupid-reveal')
+  assert.equal(options.text, 'You Stole My Heart ❤️')
+  assert.equal(options.arrowSpeed, 1.2)
+  assert.equal(options.breakDuration, 1.5)
+  assert.equal(options.width, 1.04)
+  assert.equal(options.boundsLeft, -0.52)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  assert.equal(cupid.attributes.get('magic-cupid-reveal').width, 2.08)
+  assert.equal(cupid.attributes.get('magic-cupid-reveal').boundsRight, 1.04)
+  await app.elements.fullscreenToggle.emit('click'); await app.elements.videoBackToTarget.emit('click')
+  assert.equal(app.video.paused, false)
+  assert.equal(app.video.playCalls, 1)
+  assert.equal(app.plane().attributes.has('magic-target-confetti'), false)
+  await app.video.emit('ended')
+  assert.equal(target.querySelector('.magic-cupid-reveal'), null)
+})
+
+test('disabled Cupid does not hide the video through either master or design flags', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'love.mp4', bannerType: 1, bannerDesignType: 2,
+    bannerOptions: {enabled: 'false'}}])
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 1)
+  const off = createApp({resolveBannerAnimation() { assert.fail('Disabled Cupid must not resolve') }})
+  await off.start([{targetName: 'gift', videoUrl: 'love.mp4', enableBanner: false, bannerType: 1, bannerDesignType: 2}])
+  assert.equal(off.plane().attributes.get('magic-target-video-cover').revealOpacity, undefined)
+  assert.equal(off.video.paused, false)
+})
+
 test('disabled letters skip registry lookup and keep confetti independent', async () => {
   const app = createApp({resolveBannerAnimation() { assert.fail('Disabled letters must not resolve') }})
   await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: false,

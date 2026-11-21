@@ -44,6 +44,7 @@ const registerMagicTargetVideoCover = (window) => {
       maskMode: {type: 'string', default: 'auto'},
       maskAspect: {type: 'number', default: 1},
       shape: {type: 'string', default: ''},
+      revealOpacity: {type: 'number', default: 1},
     },
 
     init() {
@@ -52,6 +53,8 @@ const registerMagicTargetVideoCover = (window) => {
       this.mesh = null
       this.maskTexture = null
       this.maskRequest = 0
+      this.maskReady = true
+      this.revealOpacity = 1
       this.onMetadata = this.updateTextureCover.bind(this)
     },
 
@@ -59,6 +62,7 @@ const registerMagicTargetVideoCover = (window) => {
       const THREE = window.AFRAME.THREE
       const video = this.data.video
       if (!THREE || !video) return
+      if (oldData.revealOpacity !== this.data.revealOpacity) this.setRevealOpacity(this.data.revealOpacity)
 
       if (!this.videoTexture || this.videoTexture.image !== video) {
         oldData.video?.removeEventListener('loadedmetadata', this.onMetadata)
@@ -87,6 +91,7 @@ const registerMagicTargetVideoCover = (window) => {
         this.material.map = this.videoTexture
         this.material.needsUpdate = true
       }
+      this.applyOpacity()
 
       const {width, height} = getVideoSurfaceSize(this.data, this.data.width, this.data.height)
       const geometry = new THREE.PlaneGeometry(width, height)
@@ -117,7 +122,8 @@ const registerMagicTargetVideoCover = (window) => {
       this.maskTexture = null
       this.material.alphaMap = null
       const hasMask = this.data.maskUrl || this.data.shape
-      this.material.opacity = hasMask ? 0 : 1
+      this.maskReady = !hasMask
+      this.applyOpacity()
       this.material.needsUpdate = true
       if (!hasMask) return
 
@@ -128,13 +134,24 @@ const registerMagicTargetVideoCover = (window) => {
         this.maskTexture.magFilter = THREE.LinearFilter
         this.maskTexture.generateMipmaps = false
         this.material.alphaMap = this.maskTexture
-        this.material.opacity = 1
+        this.maskReady = true
+        this.applyOpacity()
         this.material.needsUpdate = true
       }).catch((error) => {
         if (request !== this.maskRequest) return
         console.error('[magic] Could not load video mask:', error)
         this.el.emit('magicvideomaskerror', {error})
       })
+    },
+
+    // Runtime reveal control composes with mask readiness. Updating it never
+    // rebuilds geometry/textures, changes playback, or overrides the mask.
+    setRevealOpacity(value = 1) {
+      this.revealOpacity = Number.isFinite(Number(value)) ? Math.max(0, Math.min(1, Number(value))) : 1
+      this.applyOpacity()
+    },
+    applyOpacity() {
+      if (this.material) this.material.opacity = this.maskReady ? this.revealOpacity : 0
     },
 
     updateTextureCover() {

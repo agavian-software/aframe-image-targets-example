@@ -156,11 +156,17 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
     const targetSize = getSafeTargetSize(match.targetSize)
     const {width, height, x, y} = getTargetVideoLayout(
       match.maskConfig, targetSize, match.targetData.properties, SHAPE_VIDEO_SCALE)
+    // Resolve only enabled designs. Reveal designs must gate the surface before
+    // it can be made visible, including before their artwork has loaded.
+    const bannerDefinition = match.enableBanner
+      ? getBannerAnimation(match.bannerType, match.bannerDesignType) : null
+    const bannerAnimation = bannerDefinition ? bannerDefinition.load() : null
     plane.setAttribute('position', {x, y, z: 0})
     plane.setAttribute('magic-target-video-cover', Object.assign({
       video: '#magic-video',
       width,
       height,
+      ...(bannerDefinition?.revealsVideo ? {revealOpacity: bannerAnimation.getInitialVideoOpacity(match.bannerOptions)} : {}),
     }, match.maskConfig))
     if (match.enableConfetti) {
       plane.setAttribute('magic-target-confetti', {
@@ -170,13 +176,8 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
     plane.setAttribute('visible', false)
 
     target.querySelectorAll('.magic-banner-animation').forEach(el => el.remove())
-    // Master switch: never resolve or load a design unless banners are enabled.
-    const bannerDefinition = match.enableBanner
-      ? getBannerAnimation(match.bannerType, match.bannerDesignType) : null
     let banner = null
-    let bannerAnimation = null
     if (bannerDefinition) {
-      bannerAnimation = bannerDefinition.load()
       bannerAnimation.register(window)
       banner = document.createElement('a-entity')
       banner.classList.add('magic-banner-animation')

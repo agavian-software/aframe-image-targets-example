@@ -47,6 +47,15 @@ test('category one / design one selects the flying letter and preserves proposal
   assert.equal(getBannerAnimation(0, 0).id, 'birthday-banner')
 })
 
+test('category one / design two selects Cupid and is the only video-revealing design', () => {
+  const definition = getBannerAnimation('1', '2')
+  assert.equal(definition.id, 'cupid-heart-reveal')
+  assert.equal(definition.component, 'magic-cupid-reveal')
+  assert.equal(definition.revealsVideo, true)
+  assert.equal(definition.load().getInitialVideoOpacity(), 0)
+  for (const [type, design] of [[0, 0], [0, 4], [1, 0], [1, 1]]) assert.notEqual(getBannerAnimation(type, design).revealsVideo, true)
+})
+
 test('category zero / design one selects the gift without changing the original design', () => {
   const definition = getBannerAnimation('0', '1')
   assert.equal(definition.id, 'magical-gift-box')
