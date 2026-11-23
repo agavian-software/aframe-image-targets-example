@@ -123,6 +123,18 @@ test('entry banner text takes priority over response text and preserves blank me
   }
 })
 
+test('decor types inherit MATCHED defaults and preserve per-entry zero overrides', () => {
+  const entries = getMagicEntries({status: 'MATCHED', data: {decorType: '1', videoUrlV1: [
+    videoEntry, {...videoEntry, decorType: 0}, {...videoEntry, decorType: ' 2 '},
+  ]}})
+  assert.deepEqual(entries.map(entry => entry.decorType), [1, 0, 2])
+  assert.equal(getMagicEntries({videoUrlV1: [videoEntry]})[0].decorType, 0)
+  for (const decorType of [-1, 0.5, true, '', 'invalid', {}]) {
+    const [entry] = getMagicEntries({videoUrlV1: [{...videoEntry, decorType}]})
+    assert.equal(entry.decorType, -1)
+  }
+})
+
 test('gift settings merge response defaults and entry overrides without changing another target', () => {
   const entries = getMagicEntries({bannerOptions: {duration: 5, size: 1, particleCount: 64}, videoUrlV1: [
     {...videoEntry, bannerOptions: {duration: 8}}, {...videoEntry, targetName: 'other'},

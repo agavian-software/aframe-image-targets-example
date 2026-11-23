@@ -2,7 +2,7 @@ const {test} = require('node:test')
 const assert = require('node:assert/strict')
 const {registerMagicTargetConfetti} = require('../src/target-confetti')
 
-const createConfetti = () => {
+const createConfetti = (decorType = 0) => {
   class Vector2 {
     constructor(x, y) { this.set(x, y) }
     set(x, y) { this.x = x; this.y = y }
@@ -33,7 +33,7 @@ const createConfetti = () => {
   Object.assign(video, {paused: true, ended: false, error: null, readyState: 4})
   const objects = new Map()
   const component = Object.assign({}, AFRAME.components['magic-target-confetti'], {
-    data: {video, width: 0.8, height: 1.2, enabled: false},
+    data: {video, width: 0.8, height: 1.2, enabled: false, decorType},
     el: {setObject3D: (name, object) => objects.set(name, object), removeObject3D: name => objects.delete(name)},
   })
   component.init()
@@ -151,5 +151,54 @@ test('loading a new video restarts the blast but buffering preserves its progres
     play()
     component.tick(200, 20)
     assert.equal(component.material.uniforms.uTime.value, 0.02)
+  }
+})
+
+test('heart bubbles pause, resume, resize, reset and release their resources with the video', () => {
+  const {component, video, emit, play} = createConfetti(1)
+  const geometry = component.geometry
+  const material = component.material
+  component.data.enabled = true
+  play()
+  component.tick(0, 40)
+  assert.equal(component.mesh.visible, true)
+  assert.equal(material.uniforms.uTime.value, 0.04)
+  for (const event of ['waiting', 'stalled', 'pause', 'ended']) {
+    video.paused = event === 'pause'
+    video.ended = event === 'ended'
+    emit(event)
+    assert.equal(component.mesh.visible, false)
+    component.tick(100, 50)
+    assert.equal(material.uniforms.uTime.value, 0.04)
+    video.ended = false
+    play()
+    assert.equal(component.mesh.visible, true)
+  }
+  component.data.width = 2
+  component.data.height = 1
+  component.update({...component.data})
+  assert.equal(component.geometry, geometry)
+  assert.equal(material.uniforms.uExtent.value.x, 2)
+  emit('loadstart')
+  assert.equal(material.uniforms.uTime.value, 0)
+  assert.equal(component.mesh.visible, false)
+  component.remove()
+  assert.equal(geometry.disposed, true)
+  assert.equal(material.disposed, true)
+})
+
+test('changing decoration replaces and disposes the old effect, while reserved IDs stay hidden', () => {
+  const {component, play} = createConfetti()
+  component.data.enabled = true
+  play()
+  for (const decorType of [1, 0, 2, -1, 99]) {
+    const oldData = {...component.data}
+    const {geometry, material} = component
+    component.data.decorType = decorType
+    component.update(oldData)
+    assert.equal(geometry.disposed, true)
+    assert.equal(material.disposed, true)
+    assert.equal(component.elapsed, 0)
+    assert.equal(component.mesh.visible, decorType === 0 || decorType === 1)
   }
 })

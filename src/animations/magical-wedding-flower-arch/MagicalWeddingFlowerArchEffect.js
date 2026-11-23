@@ -57,7 +57,7 @@ const maskScissorRegion = (batch, region) => {
 class MagicalWeddingFlowerArchEffect {
   constructor({THREE, document, parent, onVideoOpacity, ...options}) {
     this.THREE = THREE; this.document = document; this.parent = parent; this.onVideoOpacity = onVideoOpacity
-    this.options = normalizeOptions(options)
+    this.options = this.normalizeOptions(options)
     this.group = new THREE.Group(); this.group.name = 'MagicalWeddingFlowerArchEffect'; this.group.visible = false; parent.add(this.group)
     const matrix = {value: new THREE.Matrix4()}
     this.clip = {matrix, bounds: {value: new THREE.Vector4(1, 1, -1, -1)}}
@@ -70,10 +70,22 @@ class MagicalWeddingFlowerArchEffect {
     this.configure(options)
   }
   get time() { return this.elapsed * 6.5 / this.options.duration * this.options.speed }
+  // Shared ceremony hooks let additional arch designs reuse the tested touch,
+  // scissors, video gate and resource lifecycle without copying their state machine.
+  normalizeOptions(input) { return normalizeOptions(input) }
+  requiredAssets(options) { return requiredAssets(options) }
+  acquireAssets(base, names) { return acquireFlowerArchAssets(this.THREE, this.document, base, this.options.maxTextureSize, names) }
+  getFrame() { return getFlowerArchFrame(this.elapsed, this.cutAt, this.options.duration, this.options.speed, this.options.closedVideoOpacity) }
+  getLayout(aspects) { return getFlowerArchLayout(this.options, aspects) }
+  getHintText() { return 'Tap ribbon to reveal' }
+  getScissorPose(frame) { return getScissorPose(frame, this.options) }
+  getCutRibbonPose(side, frame, layout) { return getCutRibbonPose(side, frame, layout) }
+  getParticle(index, frame, layout, kind) { return getFlowerArchParticle(index, frame, layout, kind) }
+  buildDecorations() {}
   get canInteract() { return this.ready && this.tracked && this.options.enabled && !this.disposed && !this.failed && this.cutAt === null }
   get videoOpacity() {
     if (this.disposed || !this.options.enabled || this.failed) return 1
-    return getFlowerArchFrame(this.elapsed, this.cutAt, this.options.duration, this.options.speed, this.options.closedVideoOpacity).videoOpacity
+    return this.getFrame().videoOpacity
   }
   publishVideoOpacity() {
     const value = this.videoOpacity
@@ -81,13 +93,13 @@ class MagicalWeddingFlowerArchEffect {
   }
   load() {
     if (this.disposed || !this.options.enabled) return Promise.resolve(false)
-    const names = requiredAssets(this.options), base = new URL(this.options.assetBase, this.document.baseURI).href
+    const names = this.requiredAssets(this.options), base = new URL(this.options.assetBase, this.document.baseURI).href
     const key = `${base}|${this.options.maxTextureSize}|${names.join(',')}|${this.options.showHint}|${this.options.showSparkles}|${this.options.showPetals}`
     if (this.assetKey === key && this.loading) return this.loading
     this.clearVisuals(); this.failed = false; this.publishVideoOpacity()
     const previous = this.assets, generation = ++this.generation
     this.assetKey = key
-    const assets = acquireFlowerArchAssets(this.THREE, this.document, base, this.options.maxTextureSize, names)
+    const assets = this.acquireAssets(base, names)
     this.assets = assets; previous?.release()
     this.loading = assets.promise.then(textures => {
       if (this.disposed || generation !== this.generation) return false
@@ -132,7 +144,7 @@ class MagicalWeddingFlowerArchEffect {
       const canvas = this.document.createElement('canvas'); canvas.width = 768; canvas.height = 128
       const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff6e4ee'; ctx.fillRect(0, 0, 768, 128)
       ctx.fillStyle = '#744326'; ctx.font = '600 48px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText('Tap ribbon to reveal', 384, 64, 720); this.batch('hint', this.canvasTexture(canvas), 1, 29)
+      ctx.fillText(this.getHintText(), 384, 64, 720); this.batch('hint', this.canvasTexture(canvas), 1, 29)
     }
     if (this.options.showSparkles) {
       const canvas = this.document.createElement('canvas'); canvas.width = 64; canvas.height = 64
@@ -158,9 +170,10 @@ class MagicalWeddingFlowerArchEffect {
     const rgba = ctx.getImageData(0, 0, canvas.width, canvas.height).data
     this.ribbonAlpha = {width: canvas.width, height: canvas.height, data: new Uint8Array(canvas.width * canvas.height)}
     for (let i = 0; i < this.ribbonAlpha.data.length; i++) this.ribbonAlpha.data[i] = rgba[i * 4 + 3]
+    this.buildDecorations()
   }
   configure(input = {}) {
-    const previous = this.options, time = this.time; this.options = normalizeOptions({...previous, ...input})
+    const previous = this.options, time = this.time; this.options = this.normalizeOptions({...previous, ...input})
     this.elapsed = time * this.options.duration / 6.5 / this.options.speed; this.sparkleColor.set(this.options.sparkleColor)
     if (this.messageCanvas && ['message', 'coupleNames', 'anniversaryNumber', 'startDate', 'endDate', 'textColor'].some(key => previous[key] !== this.options[key])) {
       drawArchMessage(this.messageCanvas, this.options); this.messageTexture.needsUpdate = true
@@ -195,9 +208,9 @@ class MagicalWeddingFlowerArchEffect {
     this.elapsed = Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0; this.publishVideoOpacity()
     this.group.visible = this.ready && this.tracked && this.options.enabled && !this.disposed
     if (!this.ready) return
-    const o = this.options, t = this.textures, f = getFlowerArchFrame(this.elapsed, this.cutAt, o.duration, o.speed, o.closedVideoOpacity)
+    const o = this.options, t = this.textures, f = this.getFrame()
     const aspects = Object.fromEntries(Object.entries(t).map(([key, texture]) => [key, texture.image.height / texture.image.width]))
-    const l = getFlowerArchLayout(o, aspects); this.group.scale.setScalar(o.width)
+    const l = this.getLayout(aspects); this.group.scale.setScalar(o.width)
     this.frameClip.bounds.value.set(-o.width / 2 - 0.008, -o.pictureHeight / 2 - 0.008, o.width / 2 + 0.008, o.pictureHeight / 2 + 0.008)
     const sprite = (name, props, textureName = name) => {
       if (!this.batches[name]) return
@@ -206,10 +219,10 @@ class MagicalWeddingFlowerArchEffect {
     }
     this.ribbonColor.setRGB(1 + f.highlight * 0.25, 1 + f.highlight * 0.14, 1)
     const ribbonWidth = l.ribbonWidth * (1 + Math.sin(f.time * 2) * 0.004 * (f.active ? 0 : 1))
-    sprite('ribbon', {width: ribbonWidth, alpha: f.cut ? 0 : f.alpha, color: this.ribbonColor, z: 0.04})
-    this.ribbonHit.position.set(0, 0, 0.05); this.ribbonHit.scale.set(ribbonWidth, ribbonWidth * aspects.ribbon, 1)
+    sprite('ribbon', {x: l.ribbonX ?? 0, y: l.ribbonY ?? 0, width: ribbonWidth, alpha: f.cut ? 0 : f.alpha, color: this.ribbonColor, z: 0.04})
+    this.ribbonHit.position.set(l.ribbonX ?? 0, l.ribbonY ?? 0, 0.05); this.ribbonHit.scale.set(ribbonWidth, ribbonWidth * aspects.ribbon, 1)
     sprite('hint', {width: 0.82, height: 0.82 / 6, y: -l.ratio / 2 - 0.15, alpha: f.alpha * (f.active ? 0 : 1), z: 0.025})
-    const scissor = getScissorPose(f, o), scissorHeight = scissor.width * aspects.scissors
+    const scissor = this.getScissorPose(f, l), scissorHeight = scissor.width * aspects.scissors
     this.scissorGroup.position.set(scissor.x, scissor.y, 0.06); this.scissorGroup.rotation.z = scissor.rotation
     sprite('scissors', {width: scissor.width, alpha: f.scissorAlpha})
     for (let i = 0; i < 2; i++) {
@@ -217,14 +230,8 @@ class MagicalWeddingFlowerArchEffect {
       this.bladePivots[i].position.set(px, py, 0.001); this.bladePivots[i].rotation.z = (i ? -1 : 1) * f.bladeAngle
       sprite(`blade${i}`, {x: -px, y: -py, width: scissor.width, height: scissorHeight, alpha: f.scissorAlpha}, 'scissors')
     }
-    for (const side of ['left', 'right']) sprite(`${side}Cut`, {...getCutRibbonPose(side, f, l), z: 0.04})
-    const halfAlpha = f.growth > 0 ? (o.useFullArch ? 1 - f.complete : 1) : 0
-    for (const [i, name] of ['leftArch', 'rightArch'].entries()) {
-      const fullWidth = l.archHeight / aspects[name], visibleHeight = l.archHeight * f.growth
-      sprite(name, {width: fullWidth, height: visibleHeight, x: (i ? 1 : -1) * (l.archWidth / 2 - fullWidth / 2 + (1 - f.growth) * 0.12),
-        y: l.baseY + visibleHeight / 2, uv: [0, 0, 1, f.growth], alpha: halfAlpha, z: 0.01})
-    }
-    sprite('fullArch', {width: l.archWidth, y: l.archY, alpha: f.complete, z: 0.012})
+    for (const side of ['left', 'right']) sprite(`${side}Cut`, {...this.getCutRibbonPose(side, f, l), z: 0.04})
+    this.renderArch(sprite, f, l, aspects)
     if (this.batches.bloom) {
       for (let i = 0; i < 3; i++) {
         const width = i ? 0.45 + f.growth * 0.2 : l.archWidth * mix(0.25, 0.9, f.growth)
@@ -243,10 +250,20 @@ class MagicalWeddingFlowerArchEffect {
     const petalCount = f.celebration > 0 ? (f.sequence >= 6.5 ? Math.min(4, o.petalCount) : o.petalCount) : 0
     for (const [name, kind, count] of [['sparkles', 'sparkle', sparkleCount], ['petals', 'petal', petalCount]]) {
       if (!this.batches[name]) continue
-      for (let i = 0; i < count; i++) this.batches[name].set(i, {...getFlowerArchParticle(i, f, l, kind), ...(kind === 'sparkle' ? {color: this.sparkleColor} : {}), z: 0.023})
+      for (let i = 0; i < count; i++) this.batches[name].set(i, {...this.getParticle(i, f, l, kind), ...(kind === 'sparkle' ? {color: this.sparkleColor} : {}), z: 0.023})
       this.batches[name].commit(count)
     }
     this.parent.updateWorldMatrix(true, false); this.clip.matrix.value.copy(this.parent.matrixWorld).invert()
+  }
+  renderArch(sprite, frame, layout, aspects) {
+    const halfAlpha = frame.growth > 0 ? (this.options.useFullArch ? 1 - frame.complete : 1) : 0
+    for (const [i, name] of ['leftArch', 'rightArch'].entries()) {
+      const fullWidth = layout.archHeight / aspects[name], visibleHeight = layout.archHeight * frame.growth
+      sprite(name, {width: fullWidth, height: visibleHeight,
+        x: (i ? 1 : -1) * (layout.archWidth / 2 - fullWidth / 2 + (1 - frame.growth) * 0.12),
+        y: layout.baseY + visibleHeight / 2, uv: [0, 0, 1, frame.growth], alpha: halfAlpha, z: 0.01})
+    }
+    sprite('fullArch', {width: layout.archWidth, y: layout.archY, alpha: frame.complete, z: 0.012})
   }
   clearVisuals() {
     this.ready = false; this.group.visible = false

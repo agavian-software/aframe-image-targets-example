@@ -92,6 +92,7 @@ const loadImageTarget = (entry) => {
           maskConfig: preparedConfig,
           videoUrl: joinUrl(MAGIC_CDN_BASE, entry.videoUrl),
           enableConfetti: entry.enableConfetti ?? true,
+          decorType: entry.decorType ?? 0,
           enableBanner: entry.enableBanner ?? true,
           birthdayText: entry.bannerMessage ?? entry.birthdayText ?? 'Happy Birthday!',
           bannerType: String(entry.bannerType ?? 0),
@@ -170,7 +171,7 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
     }, match.maskConfig))
     if (match.enableConfetti) {
       plane.setAttribute('magic-target-confetti', {
-        video: '#magic-video', width, height, enabled: false,
+        video: '#magic-video', width, height, enabled: false, decorType: match.decorType,
       })
     } else plane.removeAttribute('magic-target-confetti')
     plane.setAttribute('visible', false)
@@ -261,6 +262,7 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       bannerDefinition,
       bannerAnimation,
       enableConfetti: match.enableConfetti,
+      decorType: match.decorType,
       width,
       height,
       x,
@@ -295,7 +297,7 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       video: '#magic-video', width, height,
     }, experience.maskConfig))
     if (experience.enableConfetti) {
-      experience.plane.setAttribute('magic-target-confetti', {video: '#magic-video', width, height})
+      experience.plane.setAttribute('magic-target-confetti', {video: '#magic-video', width, height, decorType: experience.decorType})
     }
     if (experience.banner) {
       const placement = experience.bannerAnimation.getPlacement(targetSize, experience.targetProperties, {width, height, x, y})

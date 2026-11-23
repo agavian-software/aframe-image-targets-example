@@ -355,6 +355,32 @@ test('birthday banner is a separate target child above the video and clears with
   assert.equal(target.querySelector('.magic-birthday-banner'), null)
 })
 
+test('heart decor stays selected through resizing, tracking loss, and fullscreen', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: false,
+    enableConfetti: true, decorType: '1'}])
+  const decor = () => app.plane().attributes.get('magic-target-confetti')
+  assert.equal(decor().decorType, 1)
+  await app.scene.emit('xrimagefound', {name: 'gift'})
+  assert.equal(decor().enabled, true)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  assert.equal(decor().decorType, 1)
+  await app.scene.emit('xrimagelost', {name: 'gift'})
+  assert.equal(decor().enabled, false)
+  await app.scene.emit('xrimagefound', {name: 'gift'})
+  assert.equal(decor().enabled, true)
+  await app.elements.fullscreenToggle.emit('click')
+  assert.equal(decor().enabled, false)
+  await app.elements.videoBackToTarget.emit('click')
+  assert.equal(decor().enabled, true)
+  assert.equal(decor().decorType, 1)
+
+  const disabled = createApp()
+  await disabled.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableConfetti: false, decorType: 1}])
+  await disabled.scene.emit('xrimagefound', {name: 'gift'})
+  assert.equal(disabled.plane().attributes.has('magic-target-confetti'), false)
+})
+
 test('enableBanner is checked before looking up or loading any banner design', async () => {
   for (const enableBanner of [false, 0, 'false', '0']) {
     const app = createApp({resolveBannerAnimation() {
@@ -731,6 +757,35 @@ test('wedding arch gates the existing video plane, centers its union bounds and 
   await app.elements.fullscreenToggle.emit('click'); await app.elements.videoBackToTarget.emit('click')
   assert.equal(app.video.paused, false); assert.equal(app.video.playCalls, 1)
   await app.video.emit('ended'); assert.equal(target.querySelector('.magic-wedding-flower-arch'), null)
+})
+
+test('temple arch uses the existing video gate, mapped aliases and tracked bounds without changing video controls', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'wedding.mp4', enableBanner: true, enableConfetti: false, bannerType: 2, bannerDesignType: 2,
+    bannerOptions: {anniversaryNumber: 25, coupleNames: 'Eswaran ❤️ Priya', weddingDate: '09/12/2001', anniversaryDate: '09/12/2026', animationSpeed: 1.2, ribbonY: 0.1, width: 99}}])
+  const target = app.elements['magic-image-target'], arch = target.querySelector('.magic-south-indian-wedding-arch')
+  assert.ok(arch); assert.equal(target.querySelectorAll('.magic-banner-animation').length, 1)
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 0)
+  const options = arch.attributes.get('magic-south-indian-wedding-arch')
+  assert.equal(options.startDate, '09/12/2001'); assert.equal(options.endDate, '09/12/2026'); assert.equal(options.speed, 1.2)
+  assert.equal(options.ribbonY, 0.1); assert.equal(options.width, 1.04); assert.equal(options.text, 'Happy Wedding Anniversary')
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
+  assert.equal(arch.attributes.get('magic-south-indian-wedding-arch').width, 2.08)
+  assert.equal(arch.attributes.get('magic-south-indian-wedding-arch').pictureHeight, 2.08)
+  await app.elements.fullscreenToggle.emit('click'); await app.elements.videoBackToTarget.emit('click')
+  assert.equal(app.video.paused, false); assert.equal(app.video.playCalls, 1)
+  await app.video.emit('ended'); assert.equal(target.querySelector('.magic-south-indian-wedding-arch'), null)
+})
+
+test('disabled temple designs skip or release the reveal gate and leave confetti independent', async () => {
+  const off = createApp()
+  await off.start([{targetName: 'gift', videoUrl: 'wedding.mp4', bannerType: 2, bannerDesignType: 2, bannerOptions: {enabled: 'false'}}])
+  assert.equal(off.plane().attributes.get('magic-target-video-cover').revealOpacity, 1)
+  const app = createApp({resolveBannerAnimation() { assert.fail('Disabled temple must not resolve') }})
+  await app.start([{targetName: 'gift', videoUrl: 'wedding.mp4', enableBanner: false, enableConfetti: true, bannerType: 2, bannerDesignType: 2}])
+  assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, undefined)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
 })
 
 test('disabled wedding arch leaves video visibility and independent confetti available', async () => {

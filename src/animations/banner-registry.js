@@ -83,6 +83,13 @@ const BANNER_ANIMATIONS = Object.freeze({
         return {register: registerMagicalWeddingFlowerArchEffect, getPlacement: getFlowerArchPlacement, getOptions: getFlowerArchOptions, getInitialVideoOpacity}
       },
     }),
+    2: Object.freeze({
+      id: 'traditional-south-indian-wedding-arch', component: 'magic-south-indian-wedding-arch', revealsVideo: true,
+      load: () => {
+        const {registerTraditionalSouthIndianWeddingArchEffect, getTempleArchPlacement, getTempleArchOptions, getInitialVideoOpacity} = require('./traditional-south-indian-wedding-arch')
+        return {register: registerTraditionalSouthIndianWeddingArchEffect, getPlacement: getTempleArchPlacement, getOptions: getTempleArchOptions, getInitialVideoOpacity}
+      },
+    }),
   }),
   3: Object.freeze({}),
   4: Object.freeze({}),

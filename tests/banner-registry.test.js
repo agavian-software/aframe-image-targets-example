@@ -64,6 +64,15 @@ test('category two / design one selects the interactive wedding arch with its in
   assert.equal(getBannerAnimation(2, 0).id, 'golden-rings-anniversary')
 })
 
+test('category two / design two selects the temple arch while retaining previous anniversary designs', () => {
+  const definition = getBannerAnimation('2', '2')
+  assert.equal(definition.id, 'traditional-south-indian-wedding-arch')
+  assert.equal(definition.component, 'magic-south-indian-wedding-arch')
+  assert.equal(definition.revealsVideo, true); assert.equal(definition.load().getInitialVideoOpacity(), 0)
+  assert.equal(typeof definition.load().register, 'function'); assert.equal(typeof definition.load().getPlacement, 'function')
+  assert.equal(getBannerAnimation(2, 0).id, 'golden-rings-anniversary'); assert.equal(getBannerAnimation(2, 1).id, 'magical-wedding-flower-arch')
+})
+
 test('category two / design zero selects anniversary rings without gating the video', () => {
   const definition = getBannerAnimation('2', '0')
   assert.equal(definition.id, 'golden-rings-anniversary')

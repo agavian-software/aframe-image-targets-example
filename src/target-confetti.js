@@ -1,3 +1,5 @@
+const {createHeartDecoration} = require('./target-hearts')
+
 // Curved paper and ribbon strips share one instanced draw in A-Frame's renderer.
 const PARTICLE_COUNT = 184
 const RIBBON_COUNT = 36
@@ -121,6 +123,7 @@ const registerMagicTargetConfetti = (window) => {
       width: {type: 'number', default: 1},
       height: {type: 'number', default: 1},
       enabled: {default: false},
+      decorType: {type: 'int', default: 0},
     },
 
     init() {
@@ -139,48 +142,58 @@ const registerMagicTargetConfetti = (window) => {
       }
       this.onPlaybackChange = () => this.syncVisibility()
 
-      const seeds = new Float32Array(PARTICLE_COUNT * 4)
-      const styles = new Float32Array(PARTICLE_COUNT * 4)
-      const colors = new Float32Array(PARTICLE_COUNT * 3)
-      const palette = COLORS.map(color => new THREE.Color(color))
-      const ribbonPalette = RIBBON_COLORS.map(color => new THREE.Color(color))
-      for (let i = 0; i < PARTICLE_COUNT; i++) {
-        const ribbon = i < RIBBON_COUNT
-        seeds.set([Math.random(), Math.random(), Math.random(), Math.random()], i * 4)
-        styles.set([ribbon ? 1 : 0, i % 2 ? 1 : -1, Math.random(), Math.random()], i * 4)
-        const color = ribbon ? ribbonPalette[i % ribbonPalette.length] : palette[i % palette.length]
-        colors.set([color.r, color.g, color.b], i * 3)
-      }
+      this.createDecoration()
+    },
 
-      const vertices = []
-      const indices = []
-      for (let i = 0; i <= STRIP_SEGMENTS; i++) {
-        vertices.push(-1, i / STRIP_SEGMENTS, 0, 1, i / STRIP_SEGMENTS, 0)
-        if (i < STRIP_SEGMENTS) {
-          const start = i * 2
-          indices.push(start, start + 1, start + 2, start + 1, start + 3, start + 2)
+    createDecoration() {
+      const THREE = AFRAME.THREE
+      this.activeDecorType = this.data.decorType ?? 0
+      if (this.activeDecorType === 1) {
+        Object.assign(this, createHeartDecoration(THREE))
+      } else {
+        const seeds = new Float32Array(PARTICLE_COUNT * 4)
+        const styles = new Float32Array(PARTICLE_COUNT * 4)
+        const colors = new Float32Array(PARTICLE_COUNT * 3)
+        const palette = COLORS.map(color => new THREE.Color(color))
+        const ribbonPalette = RIBBON_COLORS.map(color => new THREE.Color(color))
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const ribbon = i < RIBBON_COUNT
+          seeds.set([Math.random(), Math.random(), Math.random(), Math.random()], i * 4)
+          styles.set([ribbon ? 1 : 0, i % 2 ? 1 : -1, Math.random(), Math.random()], i * 4)
+          const color = ribbon ? ribbonPalette[i % ribbonPalette.length] : palette[i % palette.length]
+          colors.set([color.r, color.g, color.b], i * 3)
         }
+
+        const vertices = []
+        const indices = []
+        for (let i = 0; i <= STRIP_SEGMENTS; i++) {
+          vertices.push(-1, i / STRIP_SEGMENTS, 0, 1, i / STRIP_SEGMENTS, 0)
+          if (i < STRIP_SEGMENTS) {
+            const start = i * 2
+            indices.push(start, start + 1, start + 2, start + 1, start + 3, start + 2)
+          }
+        }
+        this.geometry = new THREE.InstancedBufferGeometry()
+        this.geometry.instanceCount = PARTICLE_COUNT
+        this.geometry.setIndex(indices)
+        this.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3))
+        this.geometry.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 4))
+        this.geometry.setAttribute('aStyle', new THREE.InstancedBufferAttribute(styles, 4))
+        this.geometry.setAttribute('aColor', new THREE.InstancedBufferAttribute(colors, 3))
+        this.material = new THREE.ShaderMaterial({
+          uniforms: {
+            uTime: {value: 0},
+            uExtent: {value: new THREE.Vector2(1, 1)},
+            uViewportHeight: {value: 1},
+            uPixelRatio: {value: 1},
+          },
+          vertexShader,
+          fragmentShader,
+          transparent: true,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        })
       }
-      this.geometry = new THREE.InstancedBufferGeometry()
-      this.geometry.instanceCount = PARTICLE_COUNT
-      this.geometry.setIndex(indices)
-      this.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3))
-      this.geometry.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 4))
-      this.geometry.setAttribute('aStyle', new THREE.InstancedBufferAttribute(styles, 4))
-      this.geometry.setAttribute('aColor', new THREE.InstancedBufferAttribute(colors, 3))
-      this.material = new THREE.ShaderMaterial({
-        uniforms: {
-          uTime: {value: 0},
-          uExtent: {value: new THREE.Vector2(1, 1)},
-          uViewportHeight: {value: 1},
-          uPixelRatio: {value: 1},
-        },
-        vertexShader,
-        fragmentShader,
-        transparent: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      })
       this.mesh = new THREE.Mesh(this.geometry, this.material)
       // Positions are calculated in the shader, outside the static geometry bounds.
       this.mesh.frustumCulled = false
@@ -195,6 +208,12 @@ const registerMagicTargetConfetti = (window) => {
     },
 
     update(oldData = {}) {
+      if (this.activeDecorType !== (this.data.decorType ?? 0)) {
+        this.geometry.dispose()
+        this.material.dispose()
+        this.elapsed = 0
+        this.createDecoration()
+      }
       if (oldData.video !== this.data.video) {
         this.bindVideo(oldData.video, false)
         this.bindVideo(this.data.video, true)
@@ -216,7 +235,7 @@ const registerMagicTargetConfetti = (window) => {
 
     syncVisibility() {
       const video = this.data.video
-      this.mesh.visible = Boolean(this.data.enabled && video && !video.paused &&
+      this.mesh.visible = Boolean([0, 1].includes(this.activeDecorType) && this.data.enabled && video && !video.paused &&
         !video.ended && !video.error && video.readyState >= 3 && !this.buffering)
     },
 

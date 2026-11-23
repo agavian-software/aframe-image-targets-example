@@ -27,6 +27,7 @@ const getMagicEntries = (response) => {
       const maskMode = item.maskMode || custom.maskMode || response.maskMode ||
         responseCustom.maskMode || 'auto'
       const enableConfetti = getEffectEnabled(item.enableConfetti ?? response.enableConfetti)
+      const decorType = normalizeBannerDesignType(item.decorType ?? response.decorType ?? 0) ?? -1
       const enableBanner = getEffectEnabled(item.enableBanner ?? response.enableBanner)
       const bannerType = String(item.bannerType ?? response.bannerType ?? 0).trim()
       const bannerDesignType = normalizeBannerDesignType(item.bannerDesignType ?? response.bannerDesignType ?? 0)
@@ -36,13 +37,13 @@ const getMagicEntries = (response) => {
         ? DEFAULT_LOVE_MESSAGE : defaultMessage
       const effectMessage = normalizeBannerDesignType(bannerType) === 1 && bannerDesignType === 2
         ? 'You Stole My Heart ❤️' : designMessage
-      const categoryMessage = normalizeBannerDesignType(bannerType) === 2 && [0, 1].includes(bannerDesignType)
+      const categoryMessage = normalizeBannerDesignType(bannerType) === 2 && [0, 1, 2].includes(bannerDesignType)
         ? 'Happy Wedding Anniversary' : effectMessage
       const bannerMessage = item.bannerMessage ?? item.birthdayText ??
         response.bannerMessage ?? response.birthdayText ?? categoryMessage
       const bannerOptions = {...getBannerOptions(response.bannerOptions), ...getBannerOptions(item.bannerOptions)}
       return Object.assign({}, item, {
-        shape, maskUrl, maskMode, enableConfetti, enableBanner, bannerType, bannerDesignType, bannerOptions,
+        shape, maskUrl, maskMode, enableConfetti, decorType, enableBanner, bannerType, bannerDesignType, bannerOptions,
         bannerMessage: String(bannerMessage), birthdayText: String(bannerMessage),
       })
     })

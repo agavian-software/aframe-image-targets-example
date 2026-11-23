@@ -105,6 +105,7 @@ WebSocket `MATCHED` responses configure each `data.videoUrlV1[]` entry:
   "targetName": "gift",
   "videoUrl": "videos/gift.mp4",
   "enableConfetti": true,
+  "decorType": 0,
   "enableBanner": true,
   "bannerMessage": "Happy Birthday!\nAarav",
   "bannerType": 0,
@@ -113,6 +114,12 @@ WebSocket `MATCHED` responses configure each `data.videoUrlV1[]` entry:
 ```
 
 `enableConfetti` and `enableBanner` independently control their effects per target.
+When `enableConfetti` is true, `decorType` selects the side decoration: `0` (the
+default) uses the existing paper confetti and ribbons; `1` uses floating heart
+bubbles. Hearts start small on both lower sides, grow as they rise, and pop into
+small hearts and an expanding ring just above the picture. `2` is reserved and
+currently shows no side decoration, as do unsupported or invalid IDs. Numeric
+strings are accepted. Response-level defaults can be overridden per video entry.
 Disabled effects are not created and stay disabled during resizing, tracking
 reacquisition, and fullscreen transitions. Video playback continues normally.
 `bannerType` identifies one of the seven categories from `0` to `6`.
@@ -127,6 +134,7 @@ Category `1` / design `1` selects the flying love letter above the image.
 Category `1` / design `2` selects Cupid's heart break and video reveal.
 Category `2` / design `0` selects golden rings joining for a wedding anniversary.
 Category `2` / design `1` selects the interactive wedding ribbon and outer floral arch.
+Category `2` / design `2` selects the traditional South Indian temple wedding arch.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -1170,7 +1178,156 @@ and `getFlowerArchOptions()` provide the registry integration. Physically verify
 tracking, touch behavior and visual performance on the deployment phone before
 release.
 
+### Traditional South Indian wedding arch (category 2, design 2)
+
+`TraditionalSouthIndianWeddingArchEffect` adds the supplied Tamil temple-style
+golden frame, jasmine/marigold garlands, mango leaves, hanging bells and brass
+lamps/kalash to the existing live image-tracking AR view. Select it in a matched
+response or individual `videoUrlV1` entry:
+
+```json
+{
+  "enableBanner": true,
+  "enableConfetti": false,
+  "bannerType": 2,
+  "bannerDesignType": 2,
+  "bannerOptions": {
+    "anniversaryNumber": 25,
+    "coupleNames": "Eswaran ❤️ Priya",
+    "weddingDate": "09/12/2001",
+    "anniversaryDate": "09/12/2026",
+    "duration": 6.5,
+    "archScale": 1,
+    "outerMargin": 0.08,
+    "ribbonX": 0,
+    "ribbonY": 0,
+    "replayOnReacquire": true
+  }
+}
+```
+
+The red ceremonial ribbon appears across the picture with **Tap Ribbon to Open**.
+The existing AR video surface remains hidden indefinitely until a ribbon tap.
+Raycasting uses the current AR camera and canvas. Alpha-aware touch detection
+includes a small margin around the bow's transparent interior gaps, while
+rejecting empty outer corners, unrelated UI, drags and multitouch. The first
+accepted tap locks the interaction until reset.
+
+After the tap, the golden scissors enter from the right and perform a small 2.5D
+snip at the bow (1.35s in canonical sequence time). A short gold flash marks the
+cut. The closed ribbon changes to the separate left/right pieces, which drift
+outward/downward with rotation. **The existing video fades in as the ribbon
+separates (1.35–2.65s)** and is fully visible when the pieces have cleared. Its
+playback, audio and fullscreen controls remain under the existing controller;
+this effect does not create, replace, pause or seek the media.
+
+The left and right pillars grow from bottom to top (1.35–4.15s), progressively
+revealing the gold structure, jasmine/marigold garlands and decorations. Toran,
+pillar and brass-base regions are partitioned into nonoverlapping UV bands on
+the assets' shared canvas. This keeps their registration and avoids doubled
+flowers, bells or lamps. They transition into one completed temple arch
+(3.8–4.25s). The separate growth toran and lamp art then disappear; the final
+image already includes these details. Soft generated light halos illuminate the
+brass corners, and the anniversary banner appears below the picture
+(4.25–5.5s). The final frame remains with petals, a subtle border overlay and
+occasional golden glints.
+
+The **transparent inner opening is fitted around the protected photo/video
+bounds**, rather than fitting the artwork's outer canvas to the video. The
+source opening is calibrated in normalized image coordinates in `timeline.js`.
+Uniform scaling fits that opening around both the full printed image and video
+surface with `outerMargin` clearance, preserving the artwork's proportions on
+portrait and landscape targets. Crop offsets and video overscan are included.
+All flower, toran, base, glow, overlay and particle materials also clip inside
+the protected rectangle, so central video pixels stay clear while the phone or
+picture moves. Every object remains under the tracked target's Object3D.
+
+This design reuses the tested ribbon/scissors, texture lifecycle, touch controller
+and video-gate engine from `MagicalWeddingFlowerArchEffect`, with separate assets,
+calibrated layout, growth layers and reveal timing. Previous designs retain their
+own behavior. No new camera, renderer, tracking session or animation loop is
+created. The registry initializes the existing video's opacity gate before the
+effect loads. Disabled banners skip the gate and assets; disabling/removing the
+effect or failing to load artwork restores normal video visibility. Load errors
+emit `templearcherror`.
+
+`duration` (0.5–60s, default 6.5) rescales all phases after the tap; `speed`
+(0.1–3) multiplies elapsed time. Timing changes preserve the phase. `archScale`
+(1–1.8) enlarges the outside frame, and `outerMargin` (0.02–0.4 picture widths,
+default 0.08) controls opening clearance. `ribbonX` (−0.3 to 0.3) and `ribbonY`
+(−3 to 3) position the ribbon in picture-width units; vertical movement is
+clamped to keep its bow within the picture. Scissors and cut pieces follow the
+same local position. `ribbonSize`, `scissorSize` and `bannerSize` use the shared
+ceremony's size ranges. Compatibility aliases `ribbonScale` and `animationSpeed`
+map to `ribbonSize` (relative to 1.08) and `speed` before A-Frame defaults apply.
+
+`anniversaryNumber`, `coupleNames`, `startDate` and `endDate` customize the banner;
+`weddingDate` and `anniversaryDate` are aliases for the two dates. Dates display
+literally, with no parsing or calendar inference. The default heading becomes
+`Happy 25th Wedding Anniversary` when the number is 25. Set `bannerMessage` to
+override it, including `{anniversary}`, `{years}`, `{coupleNames}` or `{dates}`
+placeholders. An explicit blank heading is preserved. CanvasTexture text wraps
+and scales inside the cream strip, supporting up to six lines / 500 characters;
+runtime personalization updates reuse the texture without restarting the cut.
+
+Tracking loss cancels pending touches and hides the scene effect. With
+`replayOnReacquire: true` (default), it resets to the closed ribbon and requires
+a fresh tap on detection. Set false to freeze and resume an already activated
+ceremony at its previous phase. Duplicate detections cannot restart or recut it.
+Changing target identity always clears the prior ceremony. `enabled`,
+`showHint`, `showMessage`, `showBloom`, `showOverlay`, `showSparkles` and
+`showPetals` retain the shared controls. `showToran` / `showLamps` select the
+separate growth assets and lamp glows; they do not remove details embedded in
+the complete final image. `useFullArch: false` retains the registered component
+layers instead of the final crossfade.
+
+All twelve supplied transparent WebPs retain their exact filenames under
+`src/animations/traditional-south-indian-wedding-arch/assets/`. Only the enabled
+design/features request artwork. Reference-counted leases cap uploads at
+`maxTextureSize` (768 by default, 256–1024), disable mipmaps and dispose late
+loads safely. Real-time sparkle/petal instances share small generated textures:
+`particleCount` 0–72 (default 48), `petalCount` 0–40 (default 24), reduced to ten
+sparkles and four petals in the idle loop. Simulation stays inactive while
+waiting for a tap. The two lamp halos share the snip-glow texture.
+
+For direct Three.js use, put the parent at the union of the printed-photo and
+video bounds under the current tracked target:
+
+```js
+const {TraditionalSouthIndianWeddingArchEffect} = require('./animations/traditional-south-indian-wedding-arch')
+existingVideoCover.setRevealOpacity(0)
+const effect = new TraditionalSouthIndianWeddingArchEffect({
+  THREE, document, parent: pictureCenterAnchor,
+  width: pictureVideoBounds.width, pictureHeight: pictureVideoBounds.height,
+  anniversaryNumber: 25, coupleNames: 'Eswaran ❤️ Priya',
+  weddingDate: '09/12/2001', anniversaryDate: '09/12/2026',
+  onVideoOpacity: opacity => existingVideoCover.setRevealOpacity(opacity),
+})
+await effect.load()
+effect.attachInteraction({element: renderer.domElement, getCamera: () => camera})
+effect.start()                // matching target found; safe before assets finish loading
+effect.update(deltaSeconds)  // current AR render tick
+effect.triggerCut()          // optional programmatic equivalent of touching the ribbon
+effect.reset()               // matching target lost
+effect.configure({message: 'Happy {anniversary} Anniversary', ribbonY: 0.1})
+effect.dispose()             // release resources/listeners and restore video opacity
+```
+
+Call `load()` after changing artwork feature flags, resolution or asset base.
+`seek(elapsedSeconds)` previews the sequence after `triggerCut()` has set its tap
+time. The `magic-south-indian-wedding-arch` component automatically handles
+tracking, input, loading and the existing video plane. `getTempleArchPlacement()`
+and `getTempleArchOptions()` connect it to the current registry. Verify physical
+tracking, touch interaction and performance on the deployment phone before
+release.
+
 ### Target confetti
+
+The following describes `decorType: 0`. Set `decorType: 1` with
+`enableConfetti: true` for pink and red heart bubbles instead. The hearts rise
+over about 3.6–5.1 seconds, pop near the top, and repeat with staggered timing.
+They use one instanced mesh without image assets and follow the same playback,
+tracking, resizing and cleanup rules as confetti.
 
 While a video plays on a tracked image, bursts of bent paper flakes and curled red
 ribbons launch from its lower sides every 5.8 seconds. Independent launch angles,
