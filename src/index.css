@@ -160,6 +160,38 @@ body {
   pointer-events: none;
 }
 
+.scannerDebug {
+  position: fixed;
+  z-index: 10003;
+  right: max(8px, env(safe-area-inset-right));
+  bottom: max(8px, env(safe-area-inset-bottom));
+  left: max(8px, env(safe-area-inset-left));
+  max-width: 520px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(5, 8, 14, 0.95);
+  color: #fff;
+}
+
+.scannerDebug summary {
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scannerDebug pre {
+  max-height: min(26vh, 200px);
+  margin: 0;
+  padding: 0 12px 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  font: 12px/1.4 monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .scanRegion {
   position: relative;
   width: min(78vw, 62vh, 600px);

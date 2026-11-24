@@ -196,7 +196,7 @@ const cameraFocusPipelineModule = ({
 
   const onPointerDown = (event) => {
     if (!session || paused || event.isPrimary === false || event.button !== 0 ||
-      event.target?.closest?.('a, button, input, select, textarea, [role="button"], [contenteditable], #customLoader, .timeoutOverlay')) {
+        event.target?.closest?.('a, button, input, select, textarea, [role="button"], [contenteditable], #customLoader, .timeoutOverlay, .scannerDebug')) {
       pointer = null
       return
     }

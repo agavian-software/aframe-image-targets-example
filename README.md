@@ -1,6 +1,6 @@
 # A-Frame: Image Targets
 
-The app scans a gift image or QR code, then plays its matched video on the tracked
+The app scans a gift image, then plays its matched video on the tracked
 image target. The viewer can switch to normal webpage video using the top-right
 fullscreen button.
 
@@ -17,7 +17,7 @@ frame and continues if the image target leaves view. Exiting fullscreen or choos
 **Back to image** returns to target playback. If autoplay is blocked, playback
 retries muted or offers a **Play** button.
 Scanning stops as soon as a video is selected and stays paused during playback,
-buffering, fullscreen, and manual video pauses. Pending QR requests are cancelled
+buffering, fullscreen, and manual video pauses. Pending customer-code lookups are cancelled
 and stale scan results are ignored.
 When the video finishes, scanning resumes. In image-target mode, losing the target
 for more than 2.5 seconds also stops the video and resumes scanning. Video errors
@@ -71,23 +71,43 @@ move a detailed object nearer and farther, tap objects at different distances,
 rotate the phone, and return after switching apps. Check that the sound/navigation
 buttons still work. Very close objects may be inside the lens's minimum focus distance.
 
-### Image Identification API
+### Image Identification
 
-The app captures a center-cropped JPEG from the 8th Wall camera pipeline every two seconds and
-sends it to an image-identification API as multipart form data. Set the endpoint in
-`src/index.html`:
+The app crops the camera preview around the scan square and sends binary JPEG frames over
+one WebSocket. The server sends `READY` to request a frame. Set the endpoint in
+`src/index.html` or use the `imageWs` URL parameter.
 
 ```html
-<meta name="image-identification-api" content="https://example.com/image-identification">
+<meta name="image-identification-websocket" content="wss://example.com/ws/magic-scan">
 ```
 
-The default multipart field is `formData`, matching `MindARFrameApi.jsx`. It can be changed with
-the `image-identification-field` meta tag. You can also test a different endpoint without
-rebuilding by opening the app with `?imageApi=https://example.com/image-identification`.
+A successful match emits `imageidentified` on `window`. The app loads the returned targets
+and shape masks before activating image-target playback. Links with a `code` query
+parameter look up the gift directly.
 
-Successful API results are logged as `[image-identification] Identified image response:` and are
-also emitted as an `imageidentified` event on `window`. The app loads the returned
-targets and shape masks before activating image-target playback.
+The scanner starts at 900 px. When two consecutive full-width frames take at least 120 ms
+each to crop and encode, the scanner uses 720 px for the next three frames, then tries
+900 px again. It keeps the full width if the server reports that a full-width frame
+has started confirming a match. The default JPEG quality is 0.72 at both widths.
+
+To compare two phones, open the same scanner page with `?scannerDebug=1`. Append
+`&scannerDebug=1` if the URL already has query parameters. The **Scanner timing** panel
+at the bottom of the screen shows the latest 20 events, newest first. Swipe inside the
+panel to see older entries or tap its heading to collapse it. The same events are
+available under `[image-identification] timing` in the browser console. Test with the
+same target, lighting, and Wi-Fi.
+
+- `frame-sent` shows the send gap, time since `READY`, quality check, crop and JPEG timings,
+  queued socket bytes, JPEG dimensions and size, the largest XR update gap, and rejected
+  frame counts since the previous send. `jpegEncoder` shows whether a worker or the browser
+  canvas produced the JPEG. Worker frames also report snapshot and encode times separately.
+- `ready` reports the elapsed time from send until the browser handles the next `READY`,
+  plus the backend's processing time when supplied. `matched` reports elapsed scan time.
+- Use `?scannerDebug=1&scanWidth=900` and `?scannerDebug=1&scanWidth=720` to compare fixed
+  widths. Check both time to match and successful scans, especially on small or dim targets.
+- To compare the encoders on one phone, use `?scannerDebug=1&scanWidth=900`, then repeat with
+  `&scanEncoder=canvas` appended. Use the same printed target and compare `jpegMs` and time
+  to `MATCHED`.
 
 ### Flying birthday banner
 

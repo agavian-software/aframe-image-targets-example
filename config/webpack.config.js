@@ -83,6 +83,7 @@ const config = {
     }),
     new CopyWebpackPlugin({
       patterns: [
+        {from: path.join(srcPath, 'scanner-jpeg-worker.js'), to: 'scanner-jpeg-worker.js'},
         {
           context: path.join(srcPath, 'animations'),
           from: '**/assets/**/*',
