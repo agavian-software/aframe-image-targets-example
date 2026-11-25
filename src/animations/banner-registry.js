@@ -101,6 +101,15 @@ const BANNER_ANIMATIONS = Object.freeze({
           getOptions: getHealingOptions, getInitialVideoOpacity}
       },
     }),
+    1: Object.freeze({
+      id: 'teddy-bear-sorry', component: 'magic-teddy-bear-sorry', revealsVideo: true, defersVideoPlayback: true,
+      load: () => {
+        const {registerTeddyBearSorryEffect, getTeddyPlacement, getTeddyOptions, getInitialVideoOpacity} =
+          require('./teddy-bear-sorry')
+        return {register: registerTeddyBearSorryEffect, getPlacement: getTeddyPlacement,
+          getOptions: getTeddyOptions, getInitialVideoOpacity}
+      },
+    }),
   }),
   4: Object.freeze({}),
   5: Object.freeze({}),

@@ -1,6 +1,7 @@
 const {normalizeBannerDesignType} = require('./animations/banner-registry')
 const {DEFAULT_MESSAGE: DEFAULT_LOVE_MESSAGE} = require('./animations/flying-love-letter/text')
 const {DEFAULT_MESSAGE: DEFAULT_APOLOGY_MESSAGE} = require('./animations/broken-heart-healing/text')
+const {getDefaultMessage: getTeddyMessage} = require('./animations/teddy-bear-sorry/text')
 const getBannerOptions = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 
 const getEffectEnabled = (value, fallback = true) => {
@@ -31,20 +32,23 @@ const getMagicEntries = (response) => {
       const decorType = normalizeBannerDesignType(item.decorType ?? response.decorType ?? 0) ?? -1
       const enableBanner = getEffectEnabled(item.enableBanner ?? response.enableBanner)
       const bannerType = String(item.bannerType ?? response.bannerType ?? 0).trim()
+      const category = normalizeBannerDesignType(bannerType)
       const bannerDesignType = normalizeBannerDesignType(item.bannerDesignType ?? response.bannerDesignType ?? 0)
-      const defaultMessage = normalizeBannerDesignType(bannerType) === 1 && bannerDesignType === 0
-        ? 'Will You Marry Me? ❤️' : 'Happy Birthday!'
-      const designMessage = normalizeBannerDesignType(bannerType) === 1 && bannerDesignType === 1
-        ? DEFAULT_LOVE_MESSAGE : defaultMessage
-      const effectMessage = normalizeBannerDesignType(bannerType) === 1 && bannerDesignType === 2
-        ? 'You Stole My Heart ❤️' : designMessage
-      const categoryMessage = normalizeBannerDesignType(bannerType) === 2 && [0, 1, 2].includes(bannerDesignType)
-        ? 'Happy Wedding Anniversary' : effectMessage
-      const apologyMessage = normalizeBannerDesignType(bannerType) === 3 && bannerDesignType === 0
-        ? DEFAULT_APOLOGY_MESSAGE : categoryMessage
-      const bannerMessage = item.bannerMessage ?? item.birthdayText ??
-        response.bannerMessage ?? response.birthdayText ?? apologyMessage
       const bannerOptions = {...getBannerOptions(response.bannerOptions), ...getBannerOptions(item.bannerOptions)}
+      const defaultMessage = category === 1 && bannerDesignType === 0
+        ? 'Will You Marry Me? ❤️' : 'Happy Birthday!'
+      const designMessage = category === 1 && bannerDesignType === 1
+        ? DEFAULT_LOVE_MESSAGE : defaultMessage
+      const effectMessage = category === 1 && bannerDesignType === 2
+        ? 'You Stole My Heart ❤️' : designMessage
+      const categoryMessage = category === 2 && [0, 1, 2].includes(bannerDesignType)
+        ? 'Happy Wedding Anniversary' : effectMessage
+      const apologyMessage = category === 3 && bannerDesignType === 0
+        ? DEFAULT_APOLOGY_MESSAGE : categoryMessage
+      const teddyMessage = category === 3 && bannerDesignType === 1
+        ? getTeddyMessage(bannerOptions.messageLines) : apologyMessage
+      const bannerMessage = item.bannerMessage ?? item.birthdayText ??
+        response.bannerMessage ?? response.birthdayText ?? teddyMessage
       return Object.assign({}, item, {
         shape, maskUrl, maskMode, enableConfetti, decorType, enableBanner, bannerType, bannerDesignType, bannerOptions,
         bannerMessage: String(bannerMessage), birthdayText: String(bannerMessage),

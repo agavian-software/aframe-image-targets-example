@@ -1,20 +1,9 @@
-const {getTargetVideoLayout} = require('../../target-size')
+const {getPhotoVideoPlacement: getHealingPlacement, setTargetVideoOpacity} = require('../shared/video-reveal')
 const {getBannerAnimation} = require('../banner-registry')
 const {BrokenHeartHealingEffect, DEFAULTS, normalizeOptions} = require('./BrokenHeartHealingEffect')
 
 const COMPONENT = 'magic-broken-heart-healing'
 const ASSET_BASE = './animations/broken-heart-healing/assets'
-const getHealingPlacement = (size, properties, video) => {
-  const photo = getTargetVideoLayout({}, size, properties, 1)
-  return {x: photo.x, y: photo.y, width: photo.width, componentOptions: {
-    pictureHeight: photo.height,
-    boundsLeft: Math.min(-photo.width / 2, video.x - photo.x - video.width / 2),
-    boundsRight: Math.max(photo.width / 2, video.x - photo.x + video.width / 2),
-    boundsBottom: Math.min(-photo.height / 2, video.y - photo.y - video.height / 2),
-    boundsTop: Math.max(photo.height / 2, video.y - photo.y + video.height / 2),
-  }}
-}
-
 const getHealingOptions = options => {
   const normalized = normalizeOptions(options)
   const keys = Object.keys(DEFAULTS).filter(key =>
@@ -41,12 +30,7 @@ const registerBrokenHeartHealingEffect = window => {
     init() {
       this.effect = new BrokenHeartHealingEffect({
         THREE: AFRAME.THREE, document, ...this.data, message: this.data.text,
-        onVideoOpacity: opacity => {
-          const plane = this.el.parentElement?.querySelector('.magic-video-plane')
-          const cover = plane?.components?.['magic-target-video-cover']
-          if (cover) cover.setRevealOpacity(opacity)
-          else if (plane) plane.setAttribute('magic-target-video-cover', 'revealOpacity', opacity)
-        },
+        onVideoOpacity: opacity => setTargetVideoOpacity(this.el, opacity),
         onVideoReady: () => this.el.emit('magicvideorevealready', {targetName: this.data.targetName}, false),
       })
       this.el.setObject3D(COMPONENT, this.effect.group)

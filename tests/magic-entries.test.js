@@ -150,3 +150,13 @@ test('apology design supplies the default message and permits personalization', 
   assert.match(apology.bannerMessage, /^I'm Truly Sorry.*\nI know I hurt you/)
   assert.equal(custom.bannerMessage, 'I’m sorry, Sam.')
 })
+
+test('teddy accepts message lines while explicit banner text takes priority', () => {
+  const [teddy] = getMagicEntries({bannerType: 3, bannerDesignType: 1, videoUrlV1: videoEntry})
+  assert.match(teddy.bannerMessage, /^I’m Really Sorry.*\nPlease forgive me\./)
+  const [lines, explicit] = getMagicEntries({bannerType: 3, bannerDesignType: 1,
+    bannerOptions: {messageLines: ['I’m sorry', 'Please forgive me.']},
+    videoUrlV1: [videoEntry, {...videoEntry, bannerMessage: 'For Sam'}]})
+  assert.equal(lines.bannerMessage, 'I’m sorry\nPlease forgive me.')
+  assert.equal(explicit.bannerMessage, 'For Sam')
+})

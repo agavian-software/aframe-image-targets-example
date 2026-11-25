@@ -1,3 +1,5 @@
+const {createTextureAcquirer} = require('../shared/texture-leases')
+
 const FILES = Object.freeze({
   broken: '01_broken_heart.webp',
   needle: '02_healing_needle.webp',
@@ -12,41 +14,7 @@ const FILES = Object.freeze({
   petals: '11_rose_petal_overlay.webp',
 })
 
-const caches = new WeakMap()
-
-const acquireAssets = (THREE, base) => {
-  let cache = caches.get(THREE)
-  if (!cache) caches.set(THREE, cache = new Map())
-  let entry = cache.get(base)
-  if (!entry) {
-    const loader = new THREE.TextureLoader()
-    const textures = {}
-    const loads = Object.entries(FILES).map(([name, file]) => new Promise((resolve, reject) => {
-      loader.load(`${base}/${file}`, texture => {
-        texture.colorSpace = THREE.SRGBColorSpace
-        texture.minFilter = THREE.LinearFilter
-        texture.magFilter = THREE.LinearFilter
-        texture.generateMipmaps = false
-        textures[name] = texture
-        resolve()
-      }, undefined, reject)
-    }))
-    entry = {users: 0, textures, settled: Promise.allSettled(loads), promise: Promise.all(loads).then(() => textures)}
-    cache.set(base, entry)
-  }
-  entry.users++
-  let released = false
-  return {
-    promise: entry.promise,
-    release() {
-      if (released) return
-      released = true
-      if (--entry.users) return
-      cache.delete(base)
-      entry.settled.then(() => Object.values(entry.textures).forEach(texture => texture.dispose()))
-    },
-  }
-}
+const acquireAssets = createTextureAcquirer(FILES)
 
 // Texture rectangles are expressed in image coordinates with Y down.
 const getUv = ([left, top, right, bottom]) => [left, 1 - bottom, right - left, bottom - top]

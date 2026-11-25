@@ -1382,6 +1382,64 @@ to preload, `start()` on tracking found, `update(deltaSeconds)` from the existin
 render loop, `reset()` on tracking lost, and `dispose()` when the target is removed.
 `configure({message: 'Your message'})` updates the banner text in place.
 
+### Teddy Bear Coming to Say Sorry (category 3, design 1)
+
+Set these fields on a matched entry alongside its existing `targetName` and `videoUrl`.
+
+```json
+{
+  "enableBanner": true,
+  "bannerType": 3,
+  "bannerDesignType": 1,
+  "bannerMessage": "I’m Really Sorry ❤️\nPlease forgive me.\nI never meant to hurt you.\nYou mean so much to me.",
+  "bannerOptions": {
+    "recipientName": "Sam",
+    "senderName": "Alex",
+    "maxMessageLength": 260,
+    "interactiveLetter": true,
+    "revealVideo": true
+  }
+}
+```
+
+The teddy walks in, kneels, and offers its rose. The envelope unfolds below the
+photo and the existing video starts from the beginning at 7 seconds by default.
+The banner finishes appearing at 9 seconds while hearts, petals, and sparkles
+drift around the playing video. Tracking loss hides the scene and resets the
+sequence for replay.
+
+Set `revealVideo: false` to play the clip immediately while the teddy animates.
+With `interactiveLetter: true`, tapping the envelope opens it early. The letter
+also unfolds on its timer and video playback keeps its scheduled start.
+Set `enabled: false` in `bannerOptions` to bypass the effect.
+
+Use `bannerMessage` or `bannerOptions.messageLines` for multiline text.
+`recipientName`, `senderName`, `textColor`, and `maxMessageLength` customize
+the CanvasTexture. Configure the phase durations with `timings.walkIn`, `kneel`,
+`roseEmphasis`, `letterReveal`, and `bannerReveal` in seconds, or set `speed`.
+The `positions` object accepts `teddyX`, `teddyY`, `letterX`, `letterY`, `bannerX`,
+`bannerY`, and the four scale options `teddyScale`, `roseScale`, `letterScale`, and
+`bannerScale`. Positions use photo-relative units and positive Y points up.
+`entranceSide` takes `left` or `right`. Use `heartCount`, `petalCount`, and
+`sparkleCount` to tune the finishing loop.
+
+For direct Three.js use, import `TeddyBearSorryEffect` from
+`src/animations/teddy-bear-sorry`. Pass `THREE`, `document`, a tracked `parent`,
+and optional `onVideoOpacity` and `onVideoReady` callbacks. Call `load()`,
+`start()` on tracking found, `update(deltaSeconds)` from the existing render loop,
+`reset()` on tracking lost, and `dispose()` when removing the target.
+
+<details>
+<summary>Kneeling sprite and generation prompt</summary>
+
+The supplied walking and kneeling images were identical. The built-in image
+generator edited the supplied pose into the kneeling WebP at
+`src/animations/teddy-bear-sorry/assets/02_teddy_bear_kneeling_with_rose.webp`.
+
+> Precise pose edit for a transparent 2.5D AR sprite. Keep the exact same golden-brown teddy character, plush fur, warm brown eyes, rosy cheeks, red neck bow, red rose, lighting and softly rendered 3D look from the reference. Change only his pose. Show the entire bear in a clearly low, front-facing two-knee kneel, with both knees tucked underneath and the feet trailing, head dipped gently as he looks up apologetically and offers the single red rose forward in both paws. Preserve the character’s recognizable head and proportions so the transition from the supplied walking frame matches. Center the whole silhouette with a small transparent margin on every side. Actual transparent background, clean alpha silhouette, no ground shadow, no props besides the rose, no text.
+
+</details>
+
 ### Target confetti
 
 The following describes `decorType: 0`. Set `decorType: 1` with

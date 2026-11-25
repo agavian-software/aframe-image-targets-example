@@ -1,3 +1,5 @@
+const {clamp, mix, smooth} = require('../shared/easing')
+
 const DEFAULT_TIMINGS = Object.freeze({
   brokenHeartIntro: 1.5,
   needleEntrance: 1,
@@ -12,13 +14,6 @@ const DEFAULT_PATH = Object.freeze([
   [0.025, 0.25], [-0.097, 0.17], [0.048, 0.099], [-0.103, 0.01],
   [0.034, -0.059], [-0.072, -0.141], [0.013, -0.224], [-0.06, -0.312],
 ].map(Object.freeze))
-
-const clamp = value => Math.max(0, Math.min(1, value))
-const mix = (a, b, t) => a + (b - a) * t
-const smooth = (start, end, time) => {
-  const t = clamp((time - start) / (end - start))
-  return t * t * (3 - 2 * t)
-}
 
 const getHealingFrame = (time, timing) => {
   const needleAt = timing.brokenHeartIntro

@@ -450,7 +450,7 @@ test('backend flags independently control decorations through resizing, tracking
 test('unmapped or invalid category/design pairs keep video playing without a banner', async () => {
   const pairs = [
     ...[4, 5, 6, '6', -1, 7, 'invalid'].map(bannerType => [bannerType, 0]),
-    [3, 1],
+    [3, 2],
     ...[5, '5', 12, -1, 0.5, 'invalid', '', true].map(bannerDesignType => [0, bannerDesignType]),
   ]
   for (const [bannerType, bannerDesignType] of pairs) {
@@ -762,6 +762,39 @@ test('disabled broken heart options start normal video playback on detection', a
     bannerOptions: {enabled: false}}])
   assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 1)
   assert.equal(app.video.playCalls, 1)
+})
+
+test('teddy waits for the letter reveal and stays anchored through changes in tracked geometry', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'apology.mp4', bannerType: 3, bannerDesignType: 1,
+    bannerOptions: {messageLines: ['I’m sorry', 'Please forgive me.'], recipientName: 'Sam',
+      positions: {letterX: 0.31}, timings: {letterReveal: 3}, interactiveLetter: true}}])
+  const target = app.elements['magic-image-target']
+  const teddy = target.querySelector('.magic-teddy-bear-sorry')
+  assert.ok(teddy)
+  const options = teddy.attributes.get('magic-teddy-bear-sorry')
+  assert.equal(options.text, 'I’m sorry\nPlease forgive me.')
+  assert.equal(options.recipientName, 'Sam')
+  assert.equal(options.letterX, 0.31)
+  assert.equal(options.letterReveal, 3)
+  assert.equal(options.interactiveLetter, true)
+  assert.equal(app.video.playCalls, 0)
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 0)
+  await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 1})
+  assert.equal(teddy.attributes.get('magic-teddy-bear-sorry').width, 2.08)
+  await teddy.emit('magicvideorevealready', {targetName: 'gift'})
+  assert.equal(app.video.playCalls, 1)
+  assert.equal(app.plane().attributes.get('visible'), true)
+  assert.equal(app.elements.videoPlayer.hidden, true)
+})
+
+test('teddy plays immediately when video gating or the effect is disabled', async () => {
+  for (const bannerOptions of [{revealVideo: 'false'}, {enabled: false}]) {
+    const app = createApp()
+    await app.start([{targetName: 'gift', videoUrl: 'apology.mp4', bannerType: 3, bannerDesignType: 1, bannerOptions}])
+    assert.equal(app.video.playCalls, 1)
+    assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 1)
+  }
 })
 
 test('anniversary rings use the top target bounds and leave the video visible through resizing and fullscreen', async () => {
