@@ -21,9 +21,23 @@ test('all seven categories are represented and unmapped pairs have no fallback',
   assert.deepEqual(Object.keys(BANNER_ANIMATIONS), ['0', '1', '2', '3', '4', '5', '6'])
   for (let category = 1; category <= 6; category++) {
     if (![1, 2, 3].includes(category)) assert.equal(getBannerAnimation(category, 0), null)
-    if (![1, 2, 3].includes(category)) assert.equal(getBannerAnimation(String(category), '1'), null)
+    if (![1, 2, 3, 6].includes(category)) assert.equal(getBannerAnimation(String(category), '1'), null)
   }
   for (const design of [5, 15, 100]) assert.equal(getBannerAnimation(0, design), null)
+})
+
+test('category six / design one selects Santa without a video reveal gate', () => {
+  const definition = getBannerAnimation('6', '1')
+  assert.equal(definition.id, 'santa-flying-reindeer')
+  assert.equal(definition.component, 'magic-santa-flying-reindeer')
+  assert.equal(Boolean(definition.revealsVideo || definition.defersVideoPlayback), false)
+  const {register, getPlacement, getOptions} = definition.load()
+  assert.equal(typeof register, 'function')
+  assert.equal(typeof getPlacement, 'function')
+  const options = getOptions({enabled: 'false', positions: {giftX: 0.2}, timings: {giftDrop: 1.3}})
+  assert.equal(options.enabled, false)
+  assert.equal(options.giftX, 0.2)
+  assert.equal(options.giftDrop, 1.3)
 })
 
 test('category three / design zero reveals and defers the apology video', () => {

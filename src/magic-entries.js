@@ -2,6 +2,7 @@ const {normalizeBannerDesignType} = require('./animations/banner-registry')
 const {DEFAULT_MESSAGE: DEFAULT_LOVE_MESSAGE} = require('./animations/flying-love-letter/text')
 const {DEFAULT_MESSAGE: DEFAULT_APOLOGY_MESSAGE} = require('./animations/broken-heart-healing/text')
 const {getDefaultMessage: getTeddyMessage} = require('./animations/teddy-bear-sorry/text')
+const {getDefaultMessage: getSantaMessage} = require('./animations/santa-flying-reindeer/text')
 const getBannerOptions = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 
 const getEffectEnabled = (value, fallback = true) => {
@@ -47,8 +48,10 @@ const getMagicEntries = (response) => {
         ? DEFAULT_APOLOGY_MESSAGE : categoryMessage
       const teddyMessage = category === 3 && bannerDesignType === 1
         ? getTeddyMessage(bannerOptions.messageLines) : apologyMessage
+      const holidayMessage = category === 6 && bannerDesignType === 1
+        ? getSantaMessage(bannerOptions.messageLines) : teddyMessage
       const bannerMessage = item.bannerMessage ?? item.birthdayText ??
-        response.bannerMessage ?? response.birthdayText ?? teddyMessage
+        response.bannerMessage ?? response.birthdayText ?? holidayMessage
       return Object.assign({}, item, {
         shape, maskUrl, maskMode, enableConfetti, decorType, enableBanner, bannerType, bannerDesignType, bannerOptions,
         bannerMessage: String(bannerMessage), birthdayText: String(bannerMessage),

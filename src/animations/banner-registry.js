@@ -113,7 +113,15 @@ const BANNER_ANIMATIONS = Object.freeze({
   }),
   4: Object.freeze({}),
   5: Object.freeze({}),
-  6: Object.freeze({}),
+  6: Object.freeze({
+    1: Object.freeze({
+      id: 'santa-flying-reindeer', component: 'magic-santa-flying-reindeer',
+      load: () => {
+        const {registerSantaFlyingReindeerEffect, getSantaPlacement, getSantaOptions} = require('./santa-flying-reindeer')
+        return {register: registerSantaFlyingReindeerEffect, getPlacement: getSantaPlacement, getOptions: getSantaOptions}
+      },
+    }),
+  }),
 })
 
 const normalizeBannerDesignType = (value = 0) => {

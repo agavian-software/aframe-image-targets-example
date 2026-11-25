@@ -160,3 +160,14 @@ test('teddy accepts message lines while explicit banner text takes priority', ()
   assert.equal(lines.bannerMessage, 'I’m sorry\nPlease forgive me.')
   assert.equal(explicit.bannerMessage, 'For Sam')
 })
+
+test('Santa defaults to Merry Christmas and preserves multiline and blank greetings', () => {
+  const [standard, lines, blank] = getMagicEntries({bannerType: 6, bannerDesignType: 1, videoUrlV1: [
+    videoEntry,
+    {...videoEntry, bannerOptions: {messageLines: ['Happy Christmas', 'Wishing You Joy & Love']}},
+    {...videoEntry, bannerMessage: '', bannerOptions: {messageLines: ['Fallback']}},
+  ]})
+  assert.equal(standard.bannerMessage, 'Merry Christmas!')
+  assert.equal(lines.bannerMessage, 'Happy Christmas\nWishing You Joy & Love')
+  assert.equal(blank.bannerMessage, '')
+})

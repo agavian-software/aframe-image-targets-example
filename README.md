@@ -155,6 +155,7 @@ Category `1` / design `2` selects Cupid's heart break and video reveal.
 Category `2` / design `0` selects golden rings joining for a wedding anniversary.
 Category `2` / design `1` selects the interactive wedding ribbon and outer floral arch.
 Category `2` / design `2` selects the traditional South Indian temple wedding arch.
+Category `6` / design `1` selects Santa Flying with Reindeer.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -1439,6 +1440,55 @@ generator edited the supplied pose into the kneeling WebP at
 > Precise pose edit for a transparent 2.5D AR sprite. Keep the exact same golden-brown teddy character, plush fur, warm brown eyes, rosy cheeks, red neck bow, red rose, lighting and softly rendered 3D look from the reference. Change only his pose. Show the entire bear in a clearly low, front-facing two-knee kneel, with both knees tucked underneath and the feet trailing, head dipped gently as he looks up apologetically and offers the single red rose forward in both paws. Preserve the character’s recognizable head and proportions so the transition from the supplied walking frame matches. Center the whole silhouette with a small transparent margin on every side. Actual transparent background, clean alpha silhouette, no ground shadow, no props besides the rose, no text.
 
 </details>
+
+### Santa Flying with Reindeer (category 6, design 1)
+
+Select the effect in a matched API entry.
+
+```json
+{
+  "targetName": "christmas-card",
+  "videoUrl": "christmas.mp4",
+  "enableBanner": true,
+  "bannerType": 6,
+  "bannerDesignType": 1,
+  "bannerMessage": "Merry Christmas!\nWishing You Joy & Love",
+  "bannerOptions": {
+    "enabled": true,
+    "familyName": "The Sharma Family",
+    "timings": {"flyIn": 2.2, "giftDropPose": 1, "giftDrop": 1, "giftOpen": 1.2, "bannerReveal": 1.6},
+    "positions": {"santaX": 0.30, "santaY": 0, "giftX": 0.35, "giftY": 0, "bannerX": -0.19, "bannerY": 0},
+    "snowCount": 14
+  }
+}
+```
+
+Santa flies in above the video, pauses to drop the gift at 3.2 seconds, and flies
+out to the right. The gift bounces and opens at 4.2 seconds. The banner comes
+in from 5.4 to 7 seconds, followed by looping snowfall outside the picture.
+The normal video playback starts on detection. Tracking loss hides and resets
+the effect so the animation replays on reacquisition.
+
+Use `bannerOptions.messageLines` as an alternative to `bannerMessage`. The
+default is `Merry Christmas!`. An explicit empty message omits the greeting
+text. `recipientName` or `familyName` adds a personalized line. `textColor`
+sets the greeting color.
+
+Each timing is a phase duration in seconds. `speed` multiplies the timeline
+rate. Coordinates use photo-width units. X positions are relative to photo
+center, and Y values offset the default top or bottom placement. `size`,
+`santaScale`, `giftScale`, and `bannerScale` scale the artwork. `snowCount`
+(0–24) and `snowOpacity` (0–1) control snowfall. Set `enableBanner` or
+`bannerOptions.enabled` to `false` to disable the effect.
+
+The effect uses optimized WebP artwork and falls back to the source PNGs. It
+shares textures across instances and batches the snowflakes into one draw call.
+For standalone Three.js use, import `SantaFlyingReindeerEffect` from
+`src/animations/santa-flying-reindeer`. Construct it with `{THREE, document,
+parent}` and optional effect settings. Call `load()` to preload, `start()` on
+detection, `update(deltaSeconds)` on render ticks, `reset()` on tracking loss,
+and `dispose()` on removal. `configure({message: 'Happy Christmas'})` changes
+the live greeting.
 
 ### Target confetti
 
