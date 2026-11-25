@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     videoLoader.setAttribute('aria-hidden', 'true')
   }
   const showVideoLoader = (message) => {
-    if (!hasActiveVideo) return
+    if (!hasActiveVideo || (!webpagePlayback && targetPlayback.isWaitingForVideo(playingTargetName))) return
     if (!webpagePlayback && targetPlayback.showLoading(playingTargetName, message)) {
       videoLoader.classList.remove('is-visible')
       videoLoader.setAttribute('aria-hidden', 'true')
@@ -78,9 +78,17 @@ document.addEventListener('DOMContentLoaded', () => {
     window.clearTimeout(targetLostTimer)
     targetLostTimer = null
   }
-  const onTargetLost = ({targetName}) => {
+  const rewindDeferredVideo = () => {
+    ++playbackRequest
+    video.pause()
+    if (video.currentTime > 0) video.currentTime = 0
+    if (fullscreenToggle) fullscreenToggle.hidden = true
+    if (videoMessage) videoMessage.hidden = true
+  }
+  const onTargetLost = ({targetName, defersVideoPlayback}) => {
     if (webpagePlayback || playingTargetName !== targetName) return
     targetPlayback.hide()
+    if (defersVideoPlayback) rewindDeferredVideo()
     hideVideoLoader()
     cancelTargetLostTimer()
     targetLostTimer = window.setTimeout(() => {
@@ -89,7 +97,17 @@ document.addEventListener('DOMContentLoaded', () => {
       resumeScanning()
     }, 2500)
   }
-  const targetPlayback = createImageTargetPlayback({scene, onTargetFound: startTargetVideo, onTargetLost})
+  const targetPlayback = createImageTargetPlayback({
+    scene, onTargetFound: startTargetVideo, onTargetLost,
+    onVideoRevealReady: experience => {
+      if (playingTargetName === experience.targetName) return startTargetVideo(experience)
+    },
+  })
+  const showVideoPreview = () => {
+    if (!webpagePlayback && video.readyState >= 2 && targetPlayback.isWaitingForVideo(playingTargetName)) {
+      targetPlayback.show(playingTargetName, false)
+    }
+  }
   const returnToTarget = () => {
     if (!webpagePlayback) return
     webpagePlayback = false
@@ -98,7 +116,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (backButton) backButton.hidden = true
     if (videoMessage) videoMessage.hidden = true
     if (!hasActiveVideo) return
-    targetPlayback.show(playingTargetName)
+    if (targetPlayback.isWaitingForVideo(playingTargetName)) {
+      rewindDeferredVideo()
+      showVideoPreview()
+    } else targetPlayback.show(playingTargetName)
     if (!targetPlayback.isTracked(playingTargetName)) onTargetLost({targetName: playingTargetName})
   }
   const resumeScanning = () => {
@@ -136,9 +157,14 @@ document.addEventListener('DOMContentLoaded', () => {
   video.addEventListener('loadstart', () => showVideoLoader('Loading video...'))
   video.addEventListener('waiting', () => showVideoLoader('Buffering video...'))
   video.addEventListener('stalled', () => showVideoLoader('Connection is slow...'))
+  video.addEventListener('loadeddata', showVideoPreview)
   video.addEventListener('canplay', hideVideoLoader)
   video.addEventListener('playing', () => {
     if (!hasActiveVideo) return
+    if (!webpagePlayback && targetPlayback.isWaitingForVideo(playingTargetName)) {
+      video.pause()
+      return
+    }
     window.dispatchEvent(new Event('imageidentificationpause'))
     if (webpagePlayback) targetPlayback.hide()
     else targetPlayback.show(playingTargetName)
@@ -160,7 +186,11 @@ document.addEventListener('DOMContentLoaded', () => {
     video.muted = !video.muted
     updateSoundButton()
   })
-  playButton?.addEventListener('click', () => playVideo(playbackRequest))
+  playButton?.addEventListener('click', () => {
+    if (hasActiveVideo && (webpagePlayback || !targetPlayback.isWaitingForVideo(playingTargetName))) {
+      return playVideo(playbackRequest)
+    }
+  })
 
   fullscreenToggle?.addEventListener('click', async () => {
     if (!hasActiveVideo || !playingTargetName) return
@@ -250,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   })
 
-  async function startTargetVideo({targetName, videoUrl}) {
+  async function startTargetVideo({targetName, videoUrl, defersVideoPlayback, videoRevealReady}) {
     if (!hasActiveVideo || webpagePlayback) return
     cancelTargetLostTimer()
     const targetChanged = playingTargetName !== targetName
@@ -260,15 +290,21 @@ document.addEventListener('DOMContentLoaded', () => {
       ++playbackRequest
       targetPlayback.hide()
       video.pause()
+      video.preload = defersVideoPlayback ? 'auto' : 'metadata'
       video.src = videoUrl
       video.load()
       if (fullscreenToggle) fullscreenToggle.hidden = true
+    }
+    if (defersVideoPlayback && !videoRevealReady) {
+      hideVideoLoader()
+      showVideoPreview()
+      return
     }
     if (!video.paused) {
       targetPlayback.show(playingTargetName)
       return
     }
-    showVideoLoader('Starting video...')
+    if (!defersVideoPlayback || video.readyState < 2) showVideoLoader('Starting video...')
     await playVideo(playbackRequest)
   }
 

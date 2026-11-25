@@ -1,5 +1,6 @@
 const {normalizeBannerDesignType} = require('./animations/banner-registry')
 const {DEFAULT_MESSAGE: DEFAULT_LOVE_MESSAGE} = require('./animations/flying-love-letter/text')
+const {DEFAULT_MESSAGE: DEFAULT_APOLOGY_MESSAGE} = require('./animations/broken-heart-healing/text')
 const getBannerOptions = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 
 const getEffectEnabled = (value, fallback = true) => {
@@ -39,8 +40,10 @@ const getMagicEntries = (response) => {
         ? 'You Stole My Heart ❤️' : designMessage
       const categoryMessage = normalizeBannerDesignType(bannerType) === 2 && [0, 1, 2].includes(bannerDesignType)
         ? 'Happy Wedding Anniversary' : effectMessage
+      const apologyMessage = normalizeBannerDesignType(bannerType) === 3 && bannerDesignType === 0
+        ? DEFAULT_APOLOGY_MESSAGE : categoryMessage
       const bannerMessage = item.bannerMessage ?? item.birthdayText ??
-        response.bannerMessage ?? response.birthdayText ?? categoryMessage
+        response.bannerMessage ?? response.birthdayText ?? apologyMessage
       const bannerOptions = {...getBannerOptions(response.bannerOptions), ...getBannerOptions(item.bannerOptions)}
       return Object.assign({}, item, {
         shape, maskUrl, maskMode, enableConfetti, decorType, enableBanner, bannerType, bannerDesignType, bannerOptions,

@@ -91,7 +91,17 @@ const BANNER_ANIMATIONS = Object.freeze({
       },
     }),
   }),
-  3: Object.freeze({}),
+  3: Object.freeze({
+    0: Object.freeze({
+      id: 'broken-heart-healing', component: 'magic-broken-heart-healing', revealsVideo: true, defersVideoPlayback: true,
+      load: () => {
+        const {registerBrokenHeartHealingEffect, getHealingPlacement, getHealingOptions, getInitialVideoOpacity} =
+          require('./broken-heart-healing')
+        return {register: registerBrokenHeartHealingEffect, getPlacement: getHealingPlacement,
+          getOptions: getHealingOptions, getInitialVideoOpacity}
+      },
+    }),
+  }),
   4: Object.freeze({}),
   5: Object.freeze({}),
   6: Object.freeze({}),

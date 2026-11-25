@@ -103,7 +103,7 @@ const loadImageTarget = (entry) => {
     })
 }
 
-const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
+const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost, onVideoRevealReady}) => {
   registerMagicTargetVideoCover(window)
   registerMagicTargetConfetti(window)
   const targetExperiences = new Map()
@@ -162,12 +162,14 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
     const bannerDefinition = match.enableBanner
       ? getBannerAnimation(match.bannerType, match.bannerDesignType) : null
     const bannerAnimation = bannerDefinition ? bannerDefinition.load() : null
+    const revealOpacity = bannerDefinition?.revealsVideo
+      ? bannerAnimation.getInitialVideoOpacity(match.bannerOptions) : undefined
     plane.setAttribute('position', {x, y, z: 0})
     plane.setAttribute('magic-target-video-cover', Object.assign({
       video: '#magic-video',
       width,
       height,
-      ...(bannerDefinition?.revealsVideo ? {revealOpacity: bannerAnimation.getInitialVideoOpacity(match.bannerOptions)} : {}),
+      ...(revealOpacity === undefined ? {} : {revealOpacity}),
     }, match.maskConfig))
     if (match.enableConfetti) {
       plane.setAttribute('magic-target-confetti', {
@@ -253,9 +255,10 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
     }
 
     bindImageTargetName(target, match.targetName)
-    targetExperiences.set(match.targetName, {
+    const experience = {
       targetName: match.targetName,
       tracked: false,
+      targetSize,
       target,
       plane,
       banner,
@@ -273,7 +276,18 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       loadingText,
       videoUrl: match.videoUrl,
       maskConfig: match.maskConfig,
-    })
+      defersVideoPlayback: Boolean(bannerDefinition?.defersVideoPlayback && revealOpacity === 0),
+      videoRevealReady: false,
+    }
+    if (experience.defersVideoPlayback) {
+      banner.addEventListener('magicvideorevealready', (event) => {
+        if (event.detail?.targetName !== experience.targetName || targetExperiences.get(experience.targetName) !== experience ||
+          !experience.tracked || experience.videoRevealReady) return
+        experience.videoRevealReady = true
+        return onVideoRevealReady?.(experience)
+      })
+    }
+    targetExperiences.set(match.targetName, experience)
   }
 
   const updateTargetGeometry = (targetName, geometry) => {
@@ -283,8 +297,10 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
     const {width, height, x, y} = getTargetVideoLayout(
       experience.maskConfig, targetSize, experience.targetProperties, SHAPE_VIDEO_SCALE)
     if (experience.width === width && experience.height === height &&
-      experience.x === x && experience.y === y) return
+      experience.x === x && experience.y === y && experience.targetSize.width === targetSize.width &&
+      experience.targetSize.height === targetSize.height) return
 
+    experience.targetSize = targetSize
     experience.width = width
     experience.height = height
     experience.x = x
@@ -328,6 +344,7 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
     const experience = targetExperiences.get(event.detail?.name)
     if (!experience) return
     experience.tracked = false
+    experience.videoRevealReady = false
     return onTargetLost(experience)
   })
 
@@ -347,13 +364,19 @@ const createImageTargetPlayback = ({scene, onTargetFound, onTargetLost}) => {
       window.XR8?.XrController.configure({imageTargetData: []})
     },
     hide,
-    show(targetName) {
+    show(targetName, withDecorations = true) {
       hide()
       const experience = targetExperiences.get(targetName)
       if (experience?.tracked) {
         experience.plane.setAttribute('visible', true)
-        if (experience.enableConfetti) experience.plane.setAttribute('magic-target-confetti', 'enabled', true)
+        if (experience.enableConfetti && withDecorations) {
+          experience.plane.setAttribute('magic-target-confetti', 'enabled', true)
+        }
       }
+    },
+    isWaitingForVideo(targetName) {
+      const experience = targetExperiences.get(targetName)
+      return Boolean(experience?.defersVideoPlayback && !experience.videoRevealReady)
     },
     isTracked: targetName => Boolean(targetExperiences.get(targetName)?.tracked),
     showLoading(targetName, message) {

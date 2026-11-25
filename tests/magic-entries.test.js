@@ -142,3 +142,11 @@ test('gift settings merge response defaults and entry overrides without changing
   assert.deepEqual(entries[0].bannerOptions, {duration: 8, size: 1, particleCount: 64})
   assert.deepEqual(entries[1].bannerOptions, {duration: 5, size: 1, particleCount: 64})
 })
+
+test('apology design supplies the default message and permits personalization', () => {
+  const [apology, custom] = getMagicEntries({bannerType: 3, videoUrlV1: [
+    videoEntry, {...videoEntry, bannerMessage: 'I’m sorry, Sam.'},
+  ]})
+  assert.match(apology.bannerMessage, /^I'm Truly Sorry.*\nI know I hurt you/)
+  assert.equal(custom.bannerMessage, 'I’m sorry, Sam.')
+})

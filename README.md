@@ -1341,6 +1341,47 @@ and `getTempleArchOptions()` connect it to the current registry. Verify physical
 tracking, touch interaction and performance on the deployment phone before
 release.
 
+### Broken Heart Healing with Golden Thread (category 3, design 0)
+
+Set these fields on a matched entry alongside its existing `targetName` and `videoUrl`.
+
+```json
+{
+  "enableBanner": true,
+  "bannerType": 3,
+  "bannerDesignType": 0,
+  "bannerMessage": "I'm Truly Sorry ❤️\nI know I hurt you, and I want to make things right.",
+  "bannerOptions": {
+    "positions": {"heartScale": 0.94, "bannerY": 0},
+    "timings": {"doorOpen": 1.5, "bannerReveal": 1.5},
+    "stitchingPath": [[0.025, 0.25], [-0.097, 0.17], [0.048, 0.099], [-0.103, 0.01],
+                      [0.034, -0.059], [-0.072, -0.141], [0.013, -0.224], [-0.06, -0.312]]
+  }
+}
+```
+
+With the default timings, the doors begin opening at 6.5 seconds. The first
+video frame fades in as soon as it is available during the opening, and the clip
+starts from the beginning at 8 seconds. The banner fades in by 9.5 seconds.
+Petals and sparkles continue around the playing video. Losing the target hides
+the effect and rewinds the inline video. Reacquiring it replays the sequence.
+Set `enableBanner: false` or `bannerOptions.enabled: false` to play directly.
+
+`bannerOptions` accepts the phase durations `brokenHeartIntro`, `needleEntrance`,
+`stitching`, `healedPause`, `doorOpen`, and `bannerReveal` in seconds. Set `speed`
+to scale the whole sequence. `heartX`, `heartY`, `bannerX`, and `bannerY` are
+offsets measured in photo widths. `needleStartX`, `needleStartY`, and
+`stitchingPath` use heart widths relative to its center. Positive Y points up.
+Use `heartScale`, `needleScale`, `bannerScale`, `textColor`, `petalCount`, and
+`sparkleCount` to adjust the artwork and message.
+
+For direct Three.js use, import `BrokenHeartHealingEffect` from
+`src/animations/broken-heart-healing`. Pass `THREE`, `document`, a tracked
+`parent`, and optional `onVideoOpacity` and `onVideoReady` callbacks. Call `load()`
+to preload, `start()` on tracking found, `update(deltaSeconds)` from the existing
+render loop, `reset()` on tracking lost, and `dispose()` when the target is removed.
+`configure({message: 'Your message'})` updates the banner text in place.
+
 ### Target confetti
 
 The following describes `decorType: 0`. Set `decorType: 1` with

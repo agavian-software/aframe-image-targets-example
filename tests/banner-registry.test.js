@@ -20,10 +20,21 @@ test('category zero / design zero selects the existing birthday animation', () =
 test('all seven categories are represented and unmapped pairs have no fallback', () => {
   assert.deepEqual(Object.keys(BANNER_ANIMATIONS), ['0', '1', '2', '3', '4', '5', '6'])
   for (let category = 1; category <= 6; category++) {
-    if (![1, 2].includes(category)) assert.equal(getBannerAnimation(category, 0), null)
+    if (![1, 2, 3].includes(category)) assert.equal(getBannerAnimation(category, 0), null)
     if (![1, 2].includes(category)) assert.equal(getBannerAnimation(String(category), '1'), null)
   }
   for (const design of [5, 15, 100]) assert.equal(getBannerAnimation(0, design), null)
+})
+
+test('category three / design zero reveals and defers the apology video', () => {
+  const definition = getBannerAnimation('3', '0')
+  assert.equal(definition.id, 'broken-heart-healing')
+  assert.equal(definition.revealsVideo, true)
+  assert.equal(definition.defersVideoPlayback, true)
+  const {register, getInitialVideoOpacity} = definition.load()
+  assert.equal(typeof register, 'function')
+  assert.equal(getInitialVideoOpacity(), 0)
+  assert.equal(getInitialVideoOpacity({enabled: 'false'}), 1)
 })
 
 test('category one / design zero selects the ring proposal without changing birthday designs', () => {

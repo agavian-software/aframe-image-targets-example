@@ -449,7 +449,8 @@ test('backend flags independently control decorations through resizing, tracking
 
 test('unmapped or invalid category/design pairs keep video playing without a banner', async () => {
   const pairs = [
-    ...[1, 2, 3, 4, 5, 6, '1', '6', -1, 7, 'invalid'].map(bannerType => [bannerType, 0]),
+    ...[4, 5, 6, '6', -1, 7, 'invalid'].map(bannerType => [bannerType, 0]),
+    [3, 1],
     ...[5, '5', 12, -1, 0.5, 'invalid', '', true].map(bannerDesignType => [0, bannerDesignType]),
   ]
   for (const [bannerType, bannerDesignType] of pairs) {
@@ -714,6 +715,53 @@ test('Cupid gates only its existing video surface, stays photo-centered and pres
   assert.equal(app.plane().attributes.has('magic-target-confetti'), false)
   await app.video.emit('ended')
   assert.equal(target.querySelector('.magic-cupid-reveal'), null)
+})
+
+test('broken heart preloads the video and plays from the start after each completed opening', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'sorry.mp4', bannerType: '3', bannerDesignType: '0',
+    bannerMessage: 'My apology', bannerOptions: {timings: {doorOpen: 2}, positions: {heartY: 0.12},
+      stitchingPath: [[0, 0.2], [-0.1, 0], [0, -0.2]]}}])
+  const heart = app.elements['magic-image-target'].querySelector('.magic-broken-heart-healing')
+  assert.ok(heart)
+  const options = heart.attributes.get('magic-broken-heart-healing')
+  assert.equal(options.text, 'My apology')
+  assert.equal(options.heartY, 0.12)
+  assert.equal(options.doorOpen, 2)
+  assert.deepEqual(JSON.parse(options.stitchingPath), [[0, 0.2], [-0.1, 0], [0, -0.2]])
+  assert.equal(app.video.preload, 'auto')
+  assert.equal(app.video.playCalls, 0)
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 0)
+  app.video.readyState = 2
+  await app.video.emit('loadeddata')
+  assert.equal(app.plane().attributes.get('visible'), true)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, false)
+  await heart.emit('magicvideorevealready', {targetName: 'other'})
+  await app.elements.videoPlay.emit('click')
+  assert.equal(app.video.playCalls, 0)
+  await heart.emit('magicvideorevealready', {targetName: 'gift'})
+  await heart.emit('magicvideorevealready', {targetName: 'gift'})
+  assert.equal(app.video.playCalls, 1)
+  assert.equal(app.video.paused, false)
+  assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
+  assert.equal(app.elements.videoPlayer.hidden, true)
+  app.video.currentTime = 4
+  await app.scene.emit('xrimagelost', {name: 'gift'})
+  assert.equal(app.video.paused, true)
+  assert.equal(app.video.currentTime, 0)
+  await heart.emit('magicvideorevealready', {targetName: 'gift'})
+  await app.scene.emit('xrimagefound', {name: 'gift'})
+  assert.equal(app.video.playCalls, 1)
+  await heart.emit('magicvideorevealready', {targetName: 'gift'})
+  assert.equal(app.video.playCalls, 2)
+})
+
+test('disabled broken heart options start normal video playback on detection', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'sorry.mp4', bannerType: 3, bannerDesignType: 0,
+    bannerOptions: {enabled: false}}])
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 1)
+  assert.equal(app.video.playCalls, 1)
 })
 
 test('anniversary rings use the top target bounds and leave the video visible through resizing and fullscreen', async () => {
