@@ -132,7 +132,8 @@ const createScanner = ({search = '', workerJpeg} = {}) => {
   const module = {exports: {}}
   const scannerPath = require.resolve('../src/image-identification-pipeline')
   vm.runInNewContext(fs.readFileSync(scannerPath, 'utf8'), {
-    require: workerJpeg ? () => ({createWorkerJpegEncoder: () => workerJpeg}) : createRequire(scannerPath),
+    require: name => name === './scanner-jpeg-encoder' && workerJpeg
+      ? {createWorkerJpegEncoder: () => workerJpeg} : createRequire(scannerPath)(name),
     module, window, document, URL, URLSearchParams, WebSocket, Event, CustomEvent, AbortController,
     BarcodeDetector: window.BarcodeDetector,
     Uint8Array, performance: {now: () => now}, console: {
@@ -144,8 +145,10 @@ const createScanner = ({search = '', workerJpeg} = {}) => {
       return result.promise
     },
   })
-  const scanner = module.exports.imageIdentificationPipelineModule()
-  scanner.onStart({canvas: cameraCanvas})
+  const customerCode = module.exports.getCustomerCodeFromUrl()
+  const scanner = customerCode ? null : module.exports.imageIdentificationPipelineModule()
+  if (customerCode) module.exports.startCustomerCodeIdentification(customerCode)
+  else scanner.onStart({canvas: cameraCanvas})
   const pause = () => window.dispatchEvent(new Event('imageidentificationpause'))
   const resume = () => window.dispatchEvent(new Event('imageidentificationresume'))
   const advanceClock = ms => { now += ms }
@@ -156,8 +159,7 @@ const createScanner = ({search = '', workerJpeg} = {}) => {
       callback()
     }
   }
-  const reply = request => request.resolve({ok: true,
-    headers: {get: () => 'application/json'}, json: async () => match})
+  const reply = (request, body = match) => request.resolve({ok: true, json: async () => body})
   return {
     scanner, events, sockets, barcodeCalls, requests, encodings, encodedWidths,
     canvasStats, body, pause, resume, advance, advanceClock, runTimers, reply, logs, debugLogs,
@@ -190,10 +192,10 @@ test('a direct customer code link uses HTTP and dispatches the match without cam
   const [request] = app.requests
   assert.equal(request.options.method, 'GET')
   assert.equal(new URL(request.url).searchParams.get('customerCode'), 'gift+2026')
-  app.advance(1200)
   app.reply(request)
   await flush()
   assert.equal(app.events.find(event => event.type === 'imageidentified')?.detail, match)
+  assert.deepEqual(app.canvasStats, [])
   assert.equal(app.sockets.length, 0)
   assert.deepEqual(app.barcodeCalls, [])
 })
@@ -205,11 +207,27 @@ test('pause aborts a direct customer code lookup and ignores its late response',
   app.pause()
   assert.equal(request.options.signal.aborted, true)
   app.resume()
-  app.scanner.onUpdate()
+  assert.equal(app.requests.length, 2)
   app.reply(request)
   await flush()
   assert.equal(app.events.some(event => event.type === 'imageidentified'), false)
   assert.equal(app.sockets.length, 0)
+  app.reply(app.requests[1])
+  await flush()
+  assert.equal(app.events.find(event => event.type === 'imageidentified')?.detail, match)
+})
+
+test('a timed-out direct lookup can retry the same code and read a legacy response', async () => {
+  const app = createScanner({search: '?code=CUS-DEADBEEF'})
+  const [firstRequest] = app.requests
+  app.runTimers()
+  assert.equal(firstRequest.options.signal.aborted, true)
+  assert.equal(app.events.filter(event => event.type === 'imageidentificationtimeout').length, 1)
+  app.resume()
+  assert.equal(app.requests[1].url, firstRequest.url)
+  app.reply(app.requests[1], {magic: {response: match}})
+  await flush()
+  assert.equal(app.events.find(event => event.type === 'imageidentified')?.detail, match)
 })
 
 test('an encoded camera frame from before playback cannot be sent into a resumed scan', async () => {

@@ -114,6 +114,11 @@ body {
   visibility: hidden;
 }
 
+.scanOverlay.is-customer-lookup .scanHint,
+.scanOverlay.is-customer-lookup .scanRegion {
+  display: none;
+}
+
 .cameraFocusIndicator {
   position: fixed;
   z-index: 950;

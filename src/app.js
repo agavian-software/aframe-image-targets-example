@@ -3,17 +3,23 @@ require('./index.css')
 const {getMagicEntries} = require('./magic-entries')
 const {createImageTargetPlayback} = require('./image-target-playback')
 const {cameraFocusPipelineModule} = require('./camera-focus')
-const {imageIdentificationPipelineModule} = require('./image-identification-pipeline')
+const {getCustomerCodeFromUrl, imageIdentificationPipelineModule, startCustomerCodeIdentification} =
+  require('./image-identification-pipeline')
 
-const onxrloaded = () => {
-  XR8.addCameraPipelineModule(cameraFocusPipelineModule({
-    debug: new URLSearchParams(window.location.search).get('cameraDebug') === '1',
-  }))
-  XR8.addCameraPipelineModule(imageIdentificationPipelineModule())
-  XR8.XrController.configure({imageTargetData: []})
-}
-
-window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
+const customerCode = getCustomerCodeFromUrl()
+const xrReady = new Promise(resolve => {
+  const initializeXR = () => {
+    const {XR8} = window
+    XR8.addCameraPipelineModule(cameraFocusPipelineModule({
+      debug: new URLSearchParams(window.location.search).get('cameraDebug') === '1',
+    }))
+    if (!customerCode) XR8.addCameraPipelineModule(imageIdentificationPipelineModule())
+    XR8.XrController.configure({imageTargetData: []})
+    resolve()
+  }
+  if (window.XR8) initializeXR()
+  else window.addEventListener('xrloaded', initializeXR, {once: true})
+})
 
 document.addEventListener('DOMContentLoaded', () => {
   const scene = document.querySelector('a-scene')
@@ -44,6 +50,16 @@ document.addEventListener('DOMContentLoaded', () => {
   let targetLostTimer = null
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+
+  const scanStatus = customerCode ? 'Looking up your gift...' : 'Searching image...'
+  if (scanStatusText) scanStatusText.textContent = scanStatus
+  if (customerCode) {
+    scanOverlay?.classList.add('is-customer-lookup')
+    const timeoutTitle = document.querySelector('#timeoutTitle')
+    const timeoutMessage = document.querySelector('#timeoutMessage')
+    if (timeoutTitle) timeoutTitle.textContent = 'Could not load your gift'
+    if (timeoutMessage) timeoutMessage.textContent = 'Please try opening the gift again.'
+  }
 
   const hideAppLoader = () => appLoader.classList.add('is-hidden')
   const updateSoundButton = () => {
@@ -122,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else targetPlayback.show(playingTargetName)
     if (!targetPlayback.isTracked(playingTargetName)) onTargetLost({targetName: playingTargetName})
   }
-  const resumeScanning = () => {
+  const resetPlayback = () => {
     ++playbackRequest
     hasActiveVideo = false
     playingTargetName = ''
@@ -139,8 +155,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (videoMessage) videoMessage.hidden = true
     document.body.classList.remove('is-playing-video')
     hideVideoLoader()
-    if (scanStatusText) scanStatusText.textContent = 'Searching image...'
+    if (scanStatusText) scanStatusText.textContent = scanStatus
     scanOverlay?.classList.remove('is-hidden')
+  }
+  const resumeScanning = () => {
+    resetPlayback()
     window.dispatchEvent(new Event('imageidentificationresume'))
   }
 
@@ -174,7 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
   })
   video.addEventListener('pause', hideVideoLoader)
   video.addEventListener('ended', () => {
-    if (hasActiveVideo) resumeScanning()
+    if (!hasActiveVideo) return
+    if (customerCode) showVideoMessage('Tap Play to watch again.', false, true)
+    else resumeScanning()
   })
   video.addEventListener('error', () => {
     if (!hasActiveVideo) return
@@ -236,13 +257,15 @@ document.addEventListener('DOMContentLoaded', () => {
     returnToTarget()
   })
 
-  window.addEventListener('imageidentificationtimeout', () => {
+  const showIdentificationFailure = () => {
     if (hasActiveVideo) return
+    if (customerCode) hideAppLoader()
     scanOverlay?.classList.add('is-hidden')
     timeoutOverlay?.classList.add('is-visible')
     timeoutOverlay?.setAttribute('aria-hidden', 'false')
     tryAgainButton?.focus()
-  })
+  }
+  window.addEventListener('imageidentificationtimeout', showIdentificationFailure)
   tryAgainButton?.addEventListener('click', () => {
     timeoutOverlay?.classList.remove('is-visible')
     timeoutOverlay?.setAttribute('aria-hidden', 'true')
@@ -270,15 +293,22 @@ document.addEventListener('DOMContentLoaded', () => {
     showVideoLoader('Loading matched experience...')
 
     try {
+      if (customerCode) await xrReady
+      if (request !== playbackRequest) return
       await targetPlayback.load(entries)
       if (request !== playbackRequest) return
       hideVideoLoader()
     } catch (error) {
       if (request !== playbackRequest) return
-      resumeScanning()
+      if (customerCode) {
+        resetPlayback()
+        showIdentificationFailure()
+      } else resumeScanning()
       console.error('[magic] Could not load matched target:', error)
     }
   })
+
+  if (customerCode) startCustomerCodeIdentification(customerCode)
 
   async function startTargetVideo({targetName, videoUrl, defersVideoPlayback, videoRevealReady}) {
     if (!hasActiveVideo || webpagePlayback) return

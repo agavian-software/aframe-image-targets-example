@@ -1,4 +1,5 @@
 const {createWorkerJpegEncoder} = require('./scanner-jpeg-encoder')
+const {getMagicEntries} = require('./magic-entries')
 
 const DEFAULT_IDENTIFICATION_TIMEOUT_MS = 30000
 const DEFAULT_WS_URL = 'wss://backend.agavian.in/magic/ws/magic-scan'
@@ -124,8 +125,6 @@ const getRuntimeConfig = () => {
       globalConfig.qrApiUrl ||
       getMetaContent('qr-code-api') ||
       DEFAULT_QR_API_URL,
-
-    customerCode: getCustomerCodeFromUrl(),
 
     processingWidth: fixedWidth ?? DEFAULT_PROCESSING_WIDTH,
     adaptiveWidth: fixedWidth === null,
@@ -410,22 +409,62 @@ const analyzeFrameQuality = (
   }
 }
 
-const parseResponse = (response) => {
-  const contentType = response.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) {
-    return response.json()
-  }
-
-  return response.text()
-}
-
 const unwrapMagicResponse = (body) =>
   body?.response ||
   body?.data?.response ||
   body?.data?.data?.response ||
+  body?.magic?.response ||
   body?.payload?.response ||
   body?.data ||
   body
+
+const startCustomerCodeIdentification = (customerCode) => {
+  const config = getRuntimeConfig()
+  const lookupUrl = getCustomerCodeLookupUrl(config, customerCode)
+  let pendingLookup = null
+  let timeout = null
+
+  const cancelLookup = () => {
+    pendingLookup?.abort()
+    pendingLookup = null
+    window.clearTimeout(timeout)
+  }
+  const failLookup = () => {
+    cancelLookup()
+    window.dispatchEvent(new Event('imageidentificationtimeout'))
+  }
+  const lookup = async () => {
+    if (pendingLookup) return
+    const controller = new AbortController()
+    pendingLookup = controller
+    timeout = window.setTimeout(failLookup, config.identificationTimeoutMs)
+
+    try {
+      const response = await fetch(lookupUrl, {
+        method: 'GET',
+        headers: config.headers,
+        signal: controller.signal,
+      })
+      if (controller.signal.aborted) return
+      if (!response.ok) throw new Error(`Customer lookup returned HTTP ${response.status}.`)
+      const body = unwrapMagicResponse(await response.json())
+      if (controller.signal.aborted) return
+      if (!getMagicEntries(body).length) throw new Error('Customer lookup returned no playable image targets.')
+
+      window.clearTimeout(timeout)
+      pendingLookup = null
+      window.dispatchEvent(new CustomEvent('imageidentified', {detail: body}))
+    } catch (error) {
+      if (controller.signal.aborted) return
+      console.error('[image-identification] Customer lookup failed:', error)
+      failLookup()
+    }
+  }
+
+  window.addEventListener('imageidentificationpause', cancelLookup)
+  window.addEventListener('imageidentificationresume', lookup)
+  lookup()
+}
 
 const hasMatchedVideo = (body) => {
   const response = unwrapMagicResponse(body)
@@ -446,9 +485,6 @@ const imageIdentificationPipelineModule = () => {
 
   let cameraCanvas = null
   let scanRegion = null
-
-  let customerCodeLookupStarted = false
-  let customerCodeLookupController = null
 
   let matchFound = false
   let imageRecognitionPaused = false
@@ -517,11 +553,6 @@ const imageIdentificationPipelineModule = () => {
         allowNextFrame()
       }
     }, delay)
-  }
-
-  const abortCustomerCodeLookup = () => {
-    customerCodeLookupController?.abort()
-    customerCodeLookupController = null
   }
 
   const clearSocketReconnectTimer = () => {
@@ -722,8 +753,7 @@ const imageIdentificationPipelineModule = () => {
       socketReconnectTimer !== null ||
       matchFound ||
       timedOut ||
-      imageRecognitionPaused ||
-      config.customerCode
+      imageRecognitionPaused
     ) {
       return
     }
@@ -742,14 +772,7 @@ const imageIdentificationPipelineModule = () => {
   }
 
   const openImageSocket = () => {
-    if (
-      config.customerCode ||
-      imageRecognitionPaused ||
-      matchFound ||
-      timedOut
-    ) {
-      return
-    }
+    if (imageRecognitionPaused || matchFound || timedOut) return
 
     if (!config.wsUrl) {
       console.error('[image-identification] WebSocket URL is missing.')
@@ -835,14 +858,12 @@ const imageIdentificationPipelineModule = () => {
     timedOut = true
     matchFound = true
     closeImageSocket('TIMEOUT')
-    abortCustomerCodeLookup()
     window.dispatchEvent(new Event('imageidentificationtimeout'))
     console.log('[image-identification] Stopped after timeout without a match.')
   }
 
   const sendCurrentFrameIfReady = async () => {
     if (
-      config.customerCode ||
       imageRecognitionPaused ||
       matchFound ||
       timedOut ||
@@ -972,70 +993,6 @@ const imageIdentificationPipelineModule = () => {
     }
   }
 
-  const identifyByCustomerCode = () => {
-    const {customerCode} = config
-    if (identificationSuspended || !customerCode || customerCodeLookupStarted || matchFound || timedOut) {
-      return Promise.resolve()
-    }
-
-    customerCodeLookupStarted = true
-    imageRecognitionPaused = true
-
-    const controller = new AbortController()
-    const generation = scanGeneration
-    customerCodeLookupController = controller
-    const lookupUrl = getCustomerCodeLookupUrl(config, customerCode)
-
-    console.log('[image-identification] Starting customer-code lookup.')
-
-    return fetch(lookupUrl, {
-      method: 'GET',
-      headers: config.headers,
-      signal: controller.signal,
-    })
-      .then((response) =>
-        parseResponse(response).then((body) => ({
-          response,
-          body,
-        }))
-      )
-      .then(({response, body}) => {
-        if (generation !== scanGeneration || identificationSuspended || controller.signal.aborted) return
-        if (!response.ok) {
-          console.error('[image-identification] Customer-code lookup API error', {
-            status: response.status,
-            response: body,
-          })
-          matchFound = false
-          return
-        }
-
-        console.log('[image-identification] Customer-code lookup response:', body)
-        if (timedOut || !hasMatchedVideo(body)) {
-          matchFound = false
-          return
-        }
-
-        matchFound = true
-        window.dispatchEvent(
-          new CustomEvent('imageidentified', {
-            detail: unwrapMagicResponse(body),
-          })
-        )
-      })
-      .catch((error) => {
-        if (generation !== scanGeneration || identificationSuspended || controller.signal.aborted) return
-        if (error.name === 'AbortError') return
-        matchFound = false
-        console.error('[image-identification] Customer-code lookup failed:', error)
-      })
-      .finally(() => {
-        if (customerCodeLookupController === controller) {
-          customerCodeLookupController = null
-        }
-      })
-  }
-
   return {
     name: 'image-identification',
 
@@ -1051,12 +1008,7 @@ const imageIdentificationPipelineModule = () => {
       window.addEventListener('imageidentificationpause', pauseIdentification)
       window.addEventListener('imageidentificationresume', resumeIdentification)
 
-      if (identificationSuspended) return
-      if (config.customerCode) {
-        identifyByCustomerCode()
-      } else {
-        openImageSocket()
-      }
+      if (!identificationSuspended) openImageSocket()
     },
 
     onUpdate: () => {
@@ -1097,9 +1049,7 @@ const imageIdentificationPipelineModule = () => {
       scanRegion = null
       matchFound = false
       imageRecognitionPaused = true
-      customerCodeLookupStarted = false
 
-      abortCustomerCodeLookup()
       closeImageSocket('DETACH')
       resetBrowserCv()
       debugPanel?.remove()
@@ -1111,7 +1061,6 @@ const imageIdentificationPipelineModule = () => {
     ++scanGeneration
     identificationSuspended = true
     imageRecognitionPaused = true
-    abortCustomerCodeLookup()
     socketReadyForFrame = false
     closeImageSocket('PAUSED')
   }
@@ -1119,12 +1068,6 @@ const imageIdentificationPipelineModule = () => {
   function resumeIdentification() {
     ++scanGeneration
     identificationSuspended = false
-    if (config.customerCode) {
-      matchFound = true
-      imageRecognitionPaused = true
-      timedOut = false
-      return
-    }
 
     matchFound = false
     imageRecognitionPaused = false
@@ -1137,5 +1080,7 @@ const imageIdentificationPipelineModule = () => {
 }
 
 module.exports = {
+  getCustomerCodeFromUrl,
   imageIdentificationPipelineModule,
+  startCustomerCodeIdentification,
 }

@@ -2,6 +2,7 @@ const {test} = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const vm = require('node:vm')
+const {createRequire} = require('node:module')
 const {getMagicEntries} = require('../src/magic-entries')
 const videoMask = require('../src/video-mask')
 const {getBannerAnimation} = require('../src/animations/banner-registry')
@@ -47,9 +48,9 @@ class Element {
 }
 
 const createApp = ({play, fullscreen = 'standard', loadFailure = false,
-  resolveBannerAnimation = getBannerAnimation} = {}) => {
+  resolveBannerAnimation = getBannerAnimation, search = ''} = {}) => {
   const ids = ['magic-video', 'videoPlayer', 'customLoader', 'scanOverlay', 'scanStatusText',
-    'videoLoader', 'videoLoaderText', 'identificationTimeout', 'identificationTryAgain',
+    'videoLoader', 'videoLoaderText', 'identificationTimeout', 'identificationTryAgain', 'timeoutTitle', 'timeoutMessage',
     'identificationExit', 'soundToggle', 'fullscreenToggle', 'videoMessage', 'videoMessageText',
     'videoScanAgain', 'videoPlay', 'videoBackToTarget', 'magic-image-target']
   const elements = Object.fromEntries(ids.map(id => [id, new Element(
@@ -76,10 +77,11 @@ const createApp = ({play, fullscreen = 'standard', loadFailure = false,
   const timers = new Map()
   let timerId = 0
   const configurations = []
+  const cameraModules = []
   const requests = []
   const events = []
-  window.location = {search: '', assign() {}}
-  window.dispatchEvent = event => { events.push(event.type); window.emit(event.type) }
+  window.location = {search, href: `https://scanner.example/${search}`, assign() {}}
+  window.dispatchEvent = event => { events.push(event.type); window.emit(event.type, event.detail) }
   window.setTimeout = (callback, delay) => { timers.set(++timerId, {callback, delay}); return timerId }
   window.clearTimeout = id => timers.delete(id)
   const scene = new Element()
@@ -92,17 +94,28 @@ const createApp = ({play, fullscreen = 'standard', loadFailure = false,
     if (name === 'DOMContentLoaded') callback()
     else Element.prototype.addEventListener.call(document, name, callback)
   }
-  const xr = {addCameraPipelineModule() {}, XrController: {configure(value) { configurations.push(value) }}}
-  // Avoid automatic runtime startup in this camera-free test while still loading target data.
+  const xr = {
+    addCameraPipelineModule(module) { cameraModules.push(module.name) },
+    XrController: {configure(value) { configurations.push(value) }},
+  }
   const sandbox = {
     window, document, navigator: {userAgent: 'Chrome', platform: 'Win32', maxTouchPoints: 0},
-    URLSearchParams, Event, console: {error() {}, log() {}},
+    URL, URLSearchParams, Event, AbortController, console: {error() {}, log() {}},
+    CustomEvent: class extends Event {
+      constructor(type, {detail}) { super(type); this.detail = detail }
+    },
     Image: class {
       constructor() { this.naturalWidth = 1; this.naturalHeight = 1 }
       set src(value) { this.onload() }
     },
     fetch: async url => {
       requests.push(url)
+      if (new URL(url, window.location.href).searchParams.has('customerCode')) {
+        if (requests.length === 1) return {ok: false, status: 503}
+        return {ok: true, json: async () => ({data: {response: {
+          videoUrlV1: [{targetName: 'gift-by-code', videoUrl: 'videos/gift-by-code.mp4'}],
+        }}})}
+      }
       return {ok: !loadFailure, status: loadFailure ? 404 : 200,
         json: async () => ({properties: {width: 100, height: 100, originalWidth: 100, originalHeight: 100}})}
     },
@@ -115,12 +128,23 @@ const createApp = ({play, fullscreen = 'standard', loadFailure = false,
       : name === './animations/banner-registry' ? {getBannerAnimation: resolveBannerAnimation}
       : require(`../src/${name.slice(2)}`),
   })
+  const scannerModule = {exports: {}}
+  const scannerPath = require.resolve('../src/image-identification-pipeline')
+  vm.runInNewContext(fs.readFileSync(scannerPath, 'utf8'), {
+    ...sandbox, module: scannerModule, require: createRequire(scannerPath),
+  })
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/app'), 'utf8'), {
     ...sandbox,
     require: name => name === './magic-entries' ? {getMagicEntries}
-      : name === './image-target-playback' ? targetModule.exports : {},
+      : name === './image-target-playback' ? targetModule.exports
+      : name === './image-identification-pipeline' ? scannerModule.exports
+      : name === './camera-focus' ? {cameraFocusPipelineModule: () => ({name: 'camera-focus'})} : {},
   })
-  window.XR8 = xr
+  if (!search) window.XR8 = xr
+  const loadXR = () => {
+    window.XR8 = xr
+    return window.emit('xrloaded')
+  }
   const identify = (entries = [{targetName: 'gift', videoUrl: 'videos/gift.mp4', shape: 'circle'}]) =>
     window.emit('imageidentified', {videoUrlV1: entries})
   const start = async entries => {
@@ -134,8 +158,35 @@ const createApp = ({play, fullscreen = 'standard', loadFailure = false,
     }
   }
   return {elements, video, window, scene, document, body, events, fullscreenCalls,
-    identify, start, plane, runLostTimers, requests, configurations}
+    identify, start, plane, runLostTimers, requests, configurations, cameraModules, loadXR}
 }
+
+test('a code link looks up the gift before XR starts and retries the same code', async () => {
+  const app = createApp({search: '?code=CUS-DEADBEEF'})
+  const flush = () => new Promise(resolve => setImmediate(resolve))
+  assert.equal(new URL(app.requests[0]).searchParams.get('customerCode'), 'CUS-DEADBEEF')
+  assert.equal(app.window.XR8, undefined)
+  await flush()
+  assert.equal(app.elements.identificationTimeout.attributes.get('aria-hidden'), 'false')
+  assert.equal(app.elements.timeoutTitle.textContent, 'Could not load your gift')
+
+  await app.elements.identificationTryAgain.emit('click')
+  await flush()
+  assert.deepEqual(app.requests, [app.requests[0], app.requests[0]])
+  assert.equal(app.elements.identificationTimeout.attributes.get('aria-hidden'), 'true')
+  assert.deepEqual(app.configurations, [])
+
+  await app.loadXR()
+  await flush()
+  assert.deepEqual(app.cameraModules, ['camera-focus'])
+  assert.equal(app.configurations.at(-1).imageTargetData[0].name, 'gift-by-code')
+  await app.scene.emit('xrimagefound', {name: 'gift-by-code'})
+  assert.match(app.video.src, /\/videos\/gift-by-code\.mp4$/)
+  assert.equal(app.video.playCalls, 1)
+  await app.video.emit('ended')
+  assert.equal(app.elements.videoPlay.hidden, false)
+  assert.equal(app.requests.length, 3)
+})
 
 test('matched video first plays on its tracked image and never opens the webpage player automatically', async () => {
   const app = createApp()
