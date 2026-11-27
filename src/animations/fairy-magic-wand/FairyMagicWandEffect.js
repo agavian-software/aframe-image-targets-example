@@ -4,7 +4,7 @@ const {drawFairyMessage} = require('./text')
 const {mix, getFairyFrame, getFairyPose, getOrbitPoint, getMagicParticle} = require('./timeline')
 
 const DEFAULTS = Object.freeze({
-  enabled: true, message: 'Happy Birthday!', width: 1, pictureHeight: 1,
+  enabled: true, message: 'Happy Birthday!', width: 1, pictureHeight: 1, centerOffsetX: 0, centerOffsetY: 0,
   size: 1, fairySize: 0.48, offsetX: 0, offsetY: 0, duration: 5, speed: 1,
   showFairy: true, useHoverPose: true, showCircle: true, showParticles: true,
   showTrail: true, showBurst: true, showStars: true, showMessage: true, showWandHighlight: false,
@@ -23,6 +23,7 @@ const normalizeOptions = (input = {}) => {
     result[key] = bool(input[key], DEFAULTS[key])
   }
   for (const [key, min, max] of [['width', 0.001, 100], ['pictureHeight', 0.001, 100],
+    ['centerOffsetX', -100, 100], ['centerOffsetY', -100, 100],
     ['size', 0.15, 3], ['fairySize', 0.15, 1], ['offsetX', -3, 3], ['offsetY', -3, 3],
     ['duration', 0.5, 60], ['speed', 0.1, 3], ['particleCount', 0, 96], ['maxTextureSize', 256, 1024]]) {
     result[key] = finite(result[key], DEFAULTS[key], min, max)
@@ -49,10 +50,12 @@ const requiredAssets = (options) => {
 }
 
 class FairyMagicWandEffect {
-  constructor({THREE, document, parent, ...options}) {
+  constructor({THREE, document, parent, onVideoOpacity, onVideoReady, ...options}) {
     this.THREE = THREE
     this.document = document
     this.parent = parent
+    this.onVideoOpacity = onVideoOpacity
+    this.onVideoReady = onVideoReady
     this.options = normalizeOptions(options)
     this.group = new THREE.Group()
     this.group.name = 'FairyMagicWandEffect'
@@ -66,6 +69,8 @@ class FairyMagicWandEffect {
     this.generation = 0
     this.ready = false
     this.tracked = false
+    this.videoReleased = false
+    this.skipped = false
     this.disposed = false
     this.configure(options)
   }
@@ -88,7 +93,8 @@ class FairyMagicWandEffect {
       this.textures = textures
       this.build()
       this.ready = true
-      this.seek(0)
+      this.artworkFailed = false
+      this.seek(this.elapsed)
       return true
     }).catch((error) => {
       if (this.disposed || generation !== this.generation) return false
@@ -97,6 +103,8 @@ class FairyMagicWandEffect {
       this.assets = null
       this.assetKey = null
       this.loading = null
+      this.artworkFailed = true
+      this.seek(this.elapsed)
       throw error
     })
     return this.loading
@@ -207,7 +215,21 @@ class FairyMagicWandEffect {
 
   reset() {
     this.tracked = false
+    this.videoReleased = false
+    this.skipped = false
     this.seek(0)
+  }
+
+  publishVideo(visible) {
+    const opacity = visible ? 1 : 0
+    if (this.videoOpacity !== opacity) {
+      this.videoOpacity = opacity
+      this.onVideoOpacity?.(opacity)
+    }
+    if (visible && this.tracked && !this.videoReleased) {
+      this.videoReleased = true
+      this.onVideoReady?.()
+    }
   }
 
   update(deltaSeconds) {
@@ -217,18 +239,31 @@ class FairyMagicWandEffect {
   }
 
   seek(elapsed) {
+    if (this.disposed) return
     this.elapsed = Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0
-    this.group.visible = this.ready && this.tracked && this.options.enabled && !this.disposed
-    if (!this.ready) return
     const o = this.options
+    if (this.tracked && (!o.enabled || this.artworkFailed)) this.skipped = true
+    this.group.visible = this.ready && this.tracked && o.enabled && !this.skipped
+    if (!this.group.visible) {
+      this.publishVideo(!o.enabled || this.skipped || this.videoReleased)
+      return
+    }
     const frame = getFairyFrame(this.elapsed, o.duration, o.speed)
     const ratio = o.pictureHeight / o.width
-    const pose = getFairyPose(frame, {pictureRatio: ratio, size: o.size, fairySize: o.fairySize, useHoverPose: o.useHoverPose})
-    this.group.scale.setScalar(o.width * o.size)
-    this.group.position.set(o.width * o.offsetX, o.width * o.offsetY, 0)
-    this.clip.bounds.value.set(-o.width / 2 - 0.008, -o.pictureHeight - 0.008, o.width / 2 + 0.008, 0.008)
+    const videoVisible = frame.videoReady || this.videoReleased
+    // Let the fairy cross the printed photo, then keep the playing video clear.
+    if (videoVisible) {
+      this.clip.bounds.value.set(-o.width / 2 - 0.008, -o.pictureHeight - 0.008, o.width / 2 + 0.008, 0.008)
+    } else {
+      this.clip.bounds.value.set(0, 0, 0, 0)
+    }
     const anchorPoint = point => ({x: point.x * o.size + o.offsetX, y: point.y * o.size + o.offsetY})
     const groupPoint = point => ({x: (point.x - o.offsetX) / o.size, y: (point.y - o.offsetY) / o.size})
+    const origin = groupPoint({x: o.centerOffsetX / o.width, y: o.centerOffsetY / o.width - ratio / 2})
+    const pose = getFairyPose(frame, {pictureRatio: ratio, size: o.size, fairySize: o.fairySize,
+      useHoverPose: o.useHoverPose, origin})
+    this.group.scale.setScalar(o.width * o.size)
+    this.group.position.set(o.width * o.offsetX, o.width * o.offsetY, 0)
     const tip = anchorPoint(pose.tip)
     const sprite = (name, props) => {
       const batch = this.batches[name]
@@ -294,6 +329,7 @@ class FairyMagicWandEffect {
     }
     this.parent.updateWorldMatrix(true, false)
     this.clip.matrix.value.copy(this.parent.matrixWorld).invert()
+    this.publishVideo(videoVisible)
   }
 
   clearVisuals() {

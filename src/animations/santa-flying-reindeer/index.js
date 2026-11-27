@@ -18,7 +18,7 @@ const registerSantaFlyingReindeerEffect = ({AFRAME, document}) => {
   if (!AFRAME || AFRAME.components[COMPONENT]) return
   const schema = {
     targetName: {default: ''}, text: {default: DEFAULTS.message}, assetBase: {default: ASSET_BASE},
-    bannerType: {default: '6'}, bannerDesignType: {type: 'int', default: 1},
+    bannerType: {default: '6'}, bannerDesignType: {type: 'int', default: 2},
   }
   for (const [key, value] of Object.entries(DEFAULTS)) {
     if (key === 'message') continue

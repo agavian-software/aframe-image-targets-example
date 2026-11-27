@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const {getFairyFrame, getFairyPose, getOrbitPoint, getMagicParticle} = require('../src/animations/fairy-magic-wand/timeline')
 const {normalizeOptions, requiredAssets} = require('../src/animations/fairy-magic-wand/FairyMagicWandEffect')
-const {getFairyPlacement, getFairyOptions} = require('../src/animations/fairy-magic-wand')
+const {getFairyPlacement, getFairyOptions, getInitialVideoOpacity} = require('../src/animations/fairy-magic-wand')
 const {FAIRY_FILES, acquireFairyAssets} = require('../src/animations/fairy-magic-wand/assets')
 const {drawFairyMessage} = require('../src/animations/fairy-magic-wand/text')
 const {getTargetVideoLayout} = require('../src/target-size')
@@ -15,6 +15,8 @@ test('fairy enters, waves, completes the circle, bursts, and reveals the message
   assert.equal(getFairyFrame(1.5).circle, 0)
   assert.equal(getFairyFrame(3).circle, 1)
   assert.ok(Math.abs(getFairyFrame(2).wave) > 0.1)
+  assert.equal(getFairyFrame(3.11).videoReady, false)
+  assert.equal(getFairyFrame(3.12).videoReady, true)
   assert.ok(getFairyFrame(3.2).burstAlpha > 0.9)
   assert.equal(getFairyFrame(4).burstAlpha, 0)
   assert.equal(getFairyFrame(4).messageAlpha, 0)
@@ -24,11 +26,15 @@ test('fairy enters, waves, completes the circle, bursts, and reveals the message
   assert.deepEqual(getFairyFrame(1, 5, 2), getFairyFrame(2, 5))
 })
 
-test('the complete fairy settles outside the right edge and its painted wand faces the picture', () => {
+test('the fairy flies from the picture center to the right edge and points her wand toward the picture', () => {
   const options = {pictureRatio: 0.7, size: 1, fairySize: 0.48, useHoverPose: true}
   const initial = getFairyPose(getFairyFrame(0), options)
   const settled = getFairyPose(getFairyFrame(1.5), options)
-  assert.ok(initial.x > settled.x)
+  assert.equal(initial.x, 0)
+  assert.equal(initial.y, -0.35)
+  const rising = getFairyPose(getFairyFrame(0.5), options)
+  assert.ok(rising.x > initial.x && rising.x < settled.x)
+  assert.ok(rising.y > initial.y)
   for (const time of [1.5, 1.8, 2, 3.5, 4.5, 5, 10]) {
     const pose = getFairyPose(getFairyFrame(time), options)
     const halfWidth = Math.abs(Math.cos(pose.rotation)) * pose.width / 2 + Math.abs(Math.sin(pose.rotation)) * pose.height / 2
@@ -53,7 +59,8 @@ test('fairy clipping bounds include off-center crops and enlarged video surfaces
   const crop = {width: 480, height: 800, originalWidth: 1000, originalHeight: 1000, left: 100, top: 100}
   for (const shape of ['', 'circle', 'heart']) {
     const picture = getTargetVideoLayout({}, size, crop)
-    const video = getTargetVideoLayout({shape}, size, crop, 1.5)
+    const centered = getTargetVideoLayout({shape}, size, crop, 1.5)
+    const video = {...centered, x: centered.x + 0.08, y: centered.y - 0.12}
     const placement = getFairyPlacement(size, crop, video)
     for (const rect of [picture, video]) {
       assert.ok(placement.x - placement.width / 2 <= rect.x - rect.width / 2 + 1e-9)
@@ -61,6 +68,9 @@ test('fairy clipping bounds include off-center crops and enlarged video surfaces
       assert.ok(placement.y >= rect.y + rect.height / 2 - 1e-9)
       assert.ok(placement.y - placement.componentOptions.pictureHeight <= rect.y - rect.height / 2 + 1e-9)
     }
+    const offset = placement.componentOptions
+    assert.ok(Math.abs(placement.x + offset.centerOffsetX - picture.x) < 1e-9)
+    assert.ok(Math.abs(placement.y - offset.pictureHeight / 2 + offset.centerOffsetY - picture.y) < 1e-9)
   }
 })
 
@@ -76,6 +86,9 @@ test('selective artwork loading avoids duplicate wings and wand and honors visib
   assert.equal(normalizeOptions({particleCount: 10000, duration: -1}).particleCount, 96)
   assert.equal(normalizeOptions({particleCount: 10000, duration: -1}).duration, 0.5)
   assert.deepEqual(getFairyOptions({fairySize: 0.6, width: 99, targetName: 'wrong', message: 'wrong'}), {fairySize: 0.6})
+  assert.deepEqual(getFairyOptions({enabled: 'false'}), {enabled: false})
+  assert.equal(getInitialVideoOpacity({enabled: 'false'}), 1)
+  assert.equal(getInitialVideoOpacity(), 0)
 })
 
 test('real-time particles start at the wand and settle to at most eight glints', () => {

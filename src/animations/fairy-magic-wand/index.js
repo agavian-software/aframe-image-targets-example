@@ -1,6 +1,7 @@
 const {getTargetVideoLayout} = require('../../target-size')
 const {getBannerAnimation} = require('../banner-registry')
-const {FairyMagicWandEffect, DEFAULTS} = require('./FairyMagicWandEffect')
+const {setTargetVideoOpacity} = require('../shared/video-reveal')
+const {FairyMagicWandEffect, DEFAULTS, normalizeOptions} = require('./FairyMagicWandEffect')
 
 const getFairyPlacement = (targetSize, properties, video) => {
   const picture = getTargetVideoLayout({}, targetSize, properties, 1)
@@ -8,8 +9,15 @@ const getFairyPlacement = (targetSize, properties, video) => {
   const right = Math.max(picture.x + picture.width / 2, video.x + video.width / 2)
   const top = Math.max(picture.y + picture.height / 2, video.y + video.height / 2)
   const bottom = Math.min(picture.y - picture.height / 2, video.y - video.height / 2)
-  return {x: (left + right) / 2, y: top, width: right - left, componentOptions: {pictureHeight: top - bottom}}
+  const x = (left + right) / 2
+  return {x, y: top, width: right - left, componentOptions: {
+    pictureHeight: top - bottom,
+    centerOffsetX: picture.x - x,
+    centerOffsetY: picture.y - (top + bottom) / 2,
+  }}
 }
+
+const getInitialVideoOpacity = options => normalizeOptions(options).enabled ? 0 : 1
 
 const getFairyOptions = (options = {}) => {
   const result = {}
@@ -19,6 +27,7 @@ const getFairyOptions = (options = {}) => {
     'fairyTint', 'ribbonTint', 'particleCount', 'maxTextureSize']) {
     if (options[key] !== undefined) result[key] = options[key]
   }
+  if (options.enabled !== undefined) result.enabled = normalizeOptions(options).enabled
   return result
 }
 
@@ -36,7 +45,10 @@ const registerFairyMagicWandEffect = (window) => {
     schema,
     init() {
       this.effect = new FairyMagicWandEffect({THREE: AFRAME.THREE, document: window.document,
-        parent: this.el.object3D, ...this.data, message: this.data.text, enabled: false})
+        parent: this.el.object3D, ...this.data, message: this.data.text,
+        onVideoOpacity: opacity => setTargetVideoOpacity(this.el, opacity),
+        onVideoReady: () => this.el.emit('magicvideorevealready', {targetName: this.data.targetName}, false),
+      })
       this.el.setObject3D('fairy-magic-wand', this.effect.group)
       this.onFound = (event) => {
         if (event.detail?.name === this.data.targetName) this.effect.start()
@@ -51,7 +63,11 @@ const registerFairyMagicWandEffect = (window) => {
       if (oldData.targetName !== undefined && oldData.targetName !== this.data.targetName) this.effect.reset()
       const supported = getBannerAnimation(this.data.bannerType, this.data.bannerDesignType)?.id === 'fairy-magic-wand'
       this.effect.configure({...this.data, message: this.data.text, enabled: this.data.enabled && supported})
-      this.assetsReady = this.effect.load().catch((error) => {
+      if (!this.effect.options.enabled) return
+      const loading = this.effect.load()
+      if (loading === this.assetsPromise) return
+      this.assetsPromise = loading
+      this.assetsReady = loading.catch((error) => {
         if (this.effect.disposed) return
         console.error('[magic] Fairy artwork could not load:', error)
         this.el.emit('fairymagicerror', {error})
@@ -67,4 +83,4 @@ const registerFairyMagicWandEffect = (window) => {
   })
 }
 
-module.exports = {FairyMagicWandEffect, getFairyPlacement, getFairyOptions, registerFairyMagicWandEffect}
+module.exports = {FairyMagicWandEffect, getFairyPlacement, getFairyOptions, getInitialVideoOpacity, registerFairyMagicWandEffect}

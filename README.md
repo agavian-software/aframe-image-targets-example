@@ -145,7 +145,7 @@ reacquisition, and fullscreen transitions. Video playback continues normally.
 `bannerType` identifies one of the seven categories from `0` to `6`.
 `bannerDesignType` is a nonnegative integer selecting a design within the category
 and defaults to `0`. Category `0` / design `0` selects this flying-baby banner;
-category `0` / design `1` selects the magical gift box below the image.
+category `0` / design `1` selects the tap-to-open magical gift box.
 Category `0` / design `2` selects balloons carrying a personalized name.
 Category `0` / design `3` selects the fairy with a magic wand.
 Category `0` / design `4` selects the interactive birthday cake.
@@ -155,7 +155,8 @@ Category `1` / design `2` selects Cupid's heart break and video reveal.
 Category `2` / design `0` selects golden rings joining for a wedding anniversary.
 Category `2` / design `1` selects the interactive wedding ribbon and outer floral arch.
 Category `2` / design `2` selects the traditional South Indian temple wedding arch.
-Category `6` / design `1` selects Santa Flying with Reindeer.
+Category `6` / design `1` selects the New Year 2027 Countdown.
+Category `6` / design `2` selects Santa Flying with Reindeer.
 Other pairs render no banner until their designs are implemented and
 mapped; video and confetti continue normally. Invalid IDs also render no banner.
 `bannerMessage` supplies the text, including line breaks; an empty string keeps
@@ -253,9 +254,10 @@ still independently controlled by `enableConfetti`.
   "enableBanner": true,
   "bannerType": 0,
   "bannerDesignType": 1,
-  "bannerMessage": "Happy Birthday\nPriya",
+  "bannerMessage": "Happy Birthday!",
   "bannerOptions": {
-    "duration": 5,
+    "name": "Priya",
+    "duration": 4.2,
     "size": 1,
     "offsetX": 0,
     "offsetY": 0.025,
@@ -268,45 +270,30 @@ still independently controlled by `enableConfetti`.
 }
 ```
 
-The five-second sequence reveals a closed gift from behind the bottom edge
-(0-1.5s), pops the lid and opens the box (1.5-2.5s), transitions through golden,
-heart, and star artwork with real-time sparkles and two departing presents
-(2.5-4s), then raises the personalized banner (4-5s). The final pose floats with
-occasional sparkles. Composite illustrations crossfade as one main gift rather
-than stacking multiple complete gift boxes. A cropped and feathered portion of
-the open-gift texture supplies the final box without its explosion or spare lid.
-All eight source WebP filenames are preserved; source files are not altered.
+The closed gift rises into the tracked image in about one second and waits.
+Tapping the box or its “Tap to open” prompt pops the lid and reveals the name.
+The banner moves above the full image and video surface, then the matched video
+starts. Tracking loss resets the box so it can be opened again on reacquisition.
 
-The anchor follows the tracked target and sits below both the original picture
-and the enlarged video surface, accounting for off-center tracking crops. Every
-sprite and particle is clipped at that anchor's bottom edge in target coordinates,
-including during the entrance and lid pop. No global renderer clipping is enabled.
-Transparent sprites retain their artwork aspect ratios and explicit layer order.
-The message is drawn onto a separate CanvasTexture; changing `bannerMessage` or
-the component's `text` does not reload artwork.
+Set `bannerOptions.name` or `recipientName` for the reveal, or use
+`bannerMessage` for a longer greeting. The name uses a CanvasTexture and can
+be edited independently of the artwork. Set `bannerOptions.enabled` to
+`false` to play the video on detection.
 
-`duration` scales the whole reveal and subsequent motion (0.5-60 seconds). `size`
-scales the effect relative to picture width (0.1-3). `offsetX` shifts horizontally
-in picture-width units; positive `offsetY` moves down, with negative values clamped
-to zero to preserve the video area. Entry `bannerOptions` merge over response
-defaults. Colors use CSS color strings. Particle count is capped at 96 (64 by
-default), rendered in one instanced draw; at most ten emit occasionally afterward.
-Artwork uses a shared, reference-counted cache and is resized on upload to at most
-768 pixels per dimension by default (configurable 256-1024 at initial load), with
-no mipmaps. Only the selected design requests its images.
+`duration` scales both animated portions (0.5–60 seconds). Waiting for a tap
+adds time independently. `size` scales the gift within the picture bounds.
+`offsetX` and `offsetY` adjust the landing point in picture-width units, with
+positive Y moving down. The gift fits portrait and landscape targets, including
+off-center tracking crops. The original WebP artwork uses shared textures capped
+at 768 pixels per dimension by default. Opening sparkles use one instanced draw.
 
-`MagicalGiftBoxEffect` can also be used directly with Three.js: construct it with
-`{THREE, document, parent, ...options}`, where `parent` is a tracked Object3D at the
-picture's bottom edge. Call `load()` to prepare assets, `start()` on tracking
-acquisition, `update(deltaSeconds)` each frame, and `reset()` on tracking loss.
-`configure({enabled: false})` hides and resets the effect independently; configure
-it back to enabled and call `load()` if it has not loaded yet. `configure()` also
-updates message, timing, sizing, position, colors, and particle count. `seek(seconds)`
-supports deterministic previews. `dispose()` releases geometry, materials,
-CanvasTexture, and the shared artwork reference, including pending requests. The
-A-Frame adapter handles these calls and removes tracking listeners on teardown.
-Artwork failures emit `giftboxerror` on the decoration entity and leave video
-playback running.
+For standalone Three.js, pass `{THREE, document, parent}` with a tracked
+`parent` at the picture center. Call `load()`, `start()` on detection,
+`update(deltaSeconds)` per frame, and `reset()` on tracking loss.
+`attachInteraction()` handles canvas taps, and `open()` starts the reveal after
+the gift lands. Use `configure()` for live settings and `dispose()` on removal.
+The optional `onVideoOpacity` and `onVideoReady` callbacks connect playback.
+Artwork failures emit `giftboxerror` and release the video.
 
 ### Balloons carrying a name (category 0 / design 2)
 
@@ -431,13 +418,12 @@ loads. Artwork errors emit `balloonnameerror` without stopping video playback.
 }
 ```
 
-The fairy enters from the right on a curved flight path (0-1.5s), faces inward,
-and waves her painted wand while golden particles and a progressively drawn
-Three.js line circle the picture (1.5-3s). A wand-tip burst and outward-moving
-stars follow (3-4s). The personalized ribbon materializes above the image (4-5s),
-then the fairy floats with occasional wand glints. The ring fits portrait and
-landscape picture bounds, staying outside all four corners. It is generated at
-runtime rather than using the S-shaped artwork as a substitute for the circle.
+The fairy appears at the center of the tracked photo and flies to its right side
+(0–1.5s). She waves her wand as golden particles trace a circle (1.5–3s).
+The video preloads while hidden and starts when the wand burst peaks at 3.12s
+with the default timing. The personalized ribbon appears above the video (4–5s),
+then the fairy floats with occasional wand glints. The generated ring fits both
+portrait and landscape photos and clears all four corners.
 
 Both complete poses already contain wings and a wand. A brief weighted crossfade
 switches from the flying to hover pose; only one solid fairy is composited. Full
@@ -463,24 +449,25 @@ idle glints. The circle uses a bounded 129-vertex line.
 within it (0.15-1). Offsets are in picture-width units: positive X moves right,
 positive Y moves up. The ring continues to fit the measured picture even when
 the other objects are repositioned or scaled. Colors control particles, text,
-and artwork tints. All sprites, particles, and line fragments clip against the
-full combined picture/video rectangle in tracked coordinates, including during
-the entrance and with custom positions. Leave room beside the printed photo in
-the camera view for the fairy. The underlying birthday video stays visible.
+and artwork tints. The fairy can cross the printed photo during the entrance.
+From the reveal onward, sprites, particles, and the ring clip against the
+combined picture and video bounds so the playing video stays clear.
 
 The existing `enableBanner` master switch runs before registry lookup or asset
 loading. Designs 0, 1, and 2 remain available; one banner design is selected per
 target, so the fairy does not also create babies, gifts, or balloon arrangements.
-Video, image tracking, and independent confetti retain their existing controls.
-Tracking loss hides and resets the fairy; reacquisition replays the reveal.
+Set `bannerOptions.enabled` to `false` to play the video on detection. Tracking
+loss resets the fairy and video. Reacquisition replays the reveal before the
+video starts again.
 
 For standalone Three.js use, construct `FairyMagicWandEffect` with
 `{THREE, document, parent, width, pictureHeight, message, ...options}`. `parent`
 should follow the tracked transform at the top center of the combined picture
 bounds. Use `load()`, `start()`, `update(deltaSeconds)`, `reset()` on target loss,
 and `dispose()` on teardown. `configure()` updates text, timing, colors, position,
-scale, and enabled/visibility options; call `load()` afterward to reconcile any
-new images or procedural features. `seek(seconds)` supports previews. Geometry,
+scale, and enabled/visibility options. Call `load()` afterward to reconcile any
+new images or procedural features. The optional `onVideoOpacity` and
+`onVideoReady` callbacks connect playback. `seek(seconds)` supports previews. Geometry,
 materials, generated textures, shared artwork leases, and adapter tracking
 listeners are released on removal, including pending asset loads. Load failures
 emit `fairymagicerror` on the decoration entity while video continues.
@@ -1441,9 +1428,60 @@ generator edited the supplied pose into the kneeling WebP at
 
 </details>
 
-### Santa Flying with Reindeer (category 6, design 1)
+### New Year 2027 Countdown (category 6, design 1)
 
-Select the effect in a matched API entry.
+```json
+{
+  "targetName": "new-year-card",
+  "videoUrl": "new-year.mp4",
+  "bannerType": 6,
+  "bannerDesignType": 1,
+  "enableBanner": true,
+  "bannerOptions": {
+    "year": "2027",
+    "messageLines": ["Happy New Year 2027", "Wishing You Joy, Health & Success"],
+    "familyName": "The Sharma Family",
+    "timings": {
+      "clockEntrance": 1.5,
+      "countdownSequence": 4,
+      "midnightFlash": 1,
+      "yearReveal": 1.3,
+      "bannerReveal": 1.2
+    }
+  }
+}
+```
+
+The clock rises above the tracked video. Five digits pulse over the next four
+seconds, followed by the midnight flash, side fireworks, gold year, and greeting.
+Confetti and sparkles loop from nine seconds onward. Video uses normal playback.
+Tracking loss hides and resets the effect, ready to replay on reacquisition.
+
+Set `bannerMessage` to override `bannerOptions.messageLines`. Add a personalized
+line with `recipientName` or `familyName`. A custom four-digit `year` updates the
+default greeting and uses canvas-rendered gold numerals for the reveal.
+Set `enableBanner` or `bannerOptions.enabled` to `false` to disable the countdown.
+The existing video decoration can be controlled separately with `enableConfetti`.
+
+Use `bannerOptions.positions` for offsets in photo-width units, such as
+`{"yearY": 0.05, "bannerX": -0.1}`. The position keys are `clockX`, `clockY`,
+`countdownX`, `countdownY`, `yearX`, `yearY`, `bannerX`, `bannerY`, and the
+paired `fireworksX`, `fireworksY`, `confettiX`, `confettiY`. Use
+`bannerOptions.scales` for `size`, `clockScale`, `haloScale`, `yearScale`,
+`bannerScale`, `fireworksScale`, and `confettiScale`. Set `confettiOpacity` or
+`particleCount` to zero to turn off those layers. Optimized WebPs load first,
+with PNG fallback and fewer particles on phones and tablets.
+
+For standalone Three.js, import `NewYear2027CountdownEffect` from
+`src/animations/new-year-2027-countdown` and construct it with `{THREE, document,
+parent}` and any effect options. Call `load()` to preload, `start()` on target
+detection, `update(deltaSeconds)` per frame, `reset()` on loss, and `dispose()`
+on removal. Use `configure({message: 'Happy New Year!'})` to edit the live
+greeting. In A-Frame, update the `text` property of `magic-new-year-2027-countdown`.
+
+### Santa Flying with Reindeer (category 6, design 2)
+
+Set `bannerDesignType` to `2` on existing Santa entries.
 
 ```json
 {
@@ -1451,7 +1489,7 @@ Select the effect in a matched API entry.
   "videoUrl": "christmas.mp4",
   "enableBanner": true,
   "bannerType": 6,
-  "bannerDesignType": 1,
+  "bannerDesignType": 2,
   "bannerMessage": "Merry Christmas!\nWishing You Joy & Love",
   "bannerOptions": {
     "enabled": true,

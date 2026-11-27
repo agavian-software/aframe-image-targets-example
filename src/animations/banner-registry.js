@@ -13,9 +13,13 @@ const BANNER_ANIMATIONS = Object.freeze({
     1: Object.freeze({
       id: 'magical-gift-box',
       component: 'magic-gift-box',
+      revealsVideo: true,
+      defersVideoPlayback: true,
       load: () => {
-        const {registerMagicalGiftBoxEffect, getGiftBoxPlacement, getGiftBoxOptions} = require('./magical-gift-box')
-        return {register: registerMagicalGiftBoxEffect, getPlacement: getGiftBoxPlacement, getOptions: getGiftBoxOptions}
+        const {registerMagicalGiftBoxEffect, getGiftBoxPlacement, getGiftBoxOptions, getInitialVideoOpacity} =
+          require('./magical-gift-box')
+        return {register: registerMagicalGiftBoxEffect, getPlacement: getGiftBoxPlacement,
+          getOptions: getGiftBoxOptions, getInitialVideoOpacity}
       },
     }),
     2: Object.freeze({
@@ -29,9 +33,13 @@ const BANNER_ANIMATIONS = Object.freeze({
     3: Object.freeze({
       id: 'fairy-magic-wand',
       component: 'magic-fairy-wand',
+      revealsVideo: true,
+      defersVideoPlayback: true,
       load: () => {
-        const {registerFairyMagicWandEffect, getFairyPlacement, getFairyOptions} = require('./fairy-magic-wand')
-        return {register: registerFairyMagicWandEffect, getPlacement: getFairyPlacement, getOptions: getFairyOptions}
+        const {registerFairyMagicWandEffect, getFairyPlacement, getFairyOptions, getInitialVideoOpacity} =
+          require('./fairy-magic-wand')
+        return {register: registerFairyMagicWandEffect, getPlacement: getFairyPlacement,
+          getOptions: getFairyOptions, getInitialVideoOpacity}
       },
     }),
     4: Object.freeze({
@@ -115,6 +123,13 @@ const BANNER_ANIMATIONS = Object.freeze({
   5: Object.freeze({}),
   6: Object.freeze({
     1: Object.freeze({
+      id: 'new-year-2027-countdown', component: 'magic-new-year-2027-countdown',
+      load: () => {
+        const {registerNewYear2027CountdownEffect, getNewYearPlacement, getNewYearOptions} = require('./new-year-2027-countdown')
+        return {register: registerNewYear2027CountdownEffect, getPlacement: getNewYearPlacement, getOptions: getNewYearOptions}
+      },
+    }),
+    2: Object.freeze({
       id: 'santa-flying-reindeer', component: 'magic-santa-flying-reindeer',
       load: () => {
         const {registerSantaFlyingReindeerEffect, getSantaPlacement, getSantaOptions} = require('./santa-flying-reindeer')

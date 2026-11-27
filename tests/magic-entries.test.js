@@ -182,12 +182,25 @@ test('teddy accepts message lines while explicit banner text takes priority', ()
 })
 
 test('Santa defaults to Merry Christmas and preserves multiline and blank greetings', () => {
-  const [standard, lines, blank] = getMagicEntries({bannerType: 6, bannerDesignType: 1, videoUrlV1: [
+  const [standard, lines, blank] = getMagicEntries({bannerType: 6, bannerDesignType: 2, videoUrlV1: [
     videoEntry,
     {...videoEntry, bannerOptions: {messageLines: ['Happy Christmas', 'Wishing You Joy & Love']}},
     {...videoEntry, bannerMessage: '', bannerOptions: {messageLines: ['Fallback']}},
   ]})
   assert.equal(standard.bannerMessage, 'Merry Christmas!')
   assert.equal(lines.bannerMessage, 'Happy Christmas\nWishing You Joy & Love')
+  assert.equal(blank.bannerMessage, '')
+})
+
+test('New Year uses the configured year or multiline greeting and respects explicit text', () => {
+  const [standard, alternateYear, lines, blank] = getMagicEntries({bannerType: 6, bannerDesignType: 1, videoUrlV1: [
+    videoEntry,
+    {...videoEntry, bannerOptions: {year: 2028}},
+    {...videoEntry, bannerOptions: {messageLines: ['Happy New Year', 'From the Family']}},
+    {...videoEntry, bannerMessage: '', bannerOptions: {messageLines: ['Fallback']}},
+  ]})
+  assert.equal(standard.bannerMessage, 'Happy New Year 2027\nWishing You Joy, Health & Success')
+  assert.match(alternateYear.bannerMessage, /^Happy New Year 2028\n/)
+  assert.equal(lines.bannerMessage, 'Happy New Year\nFrom the Family')
   assert.equal(blank.bannerMessage, '')
 })

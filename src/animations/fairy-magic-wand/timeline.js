@@ -1,9 +1,6 @@
-const clamp = value => Math.max(0, Math.min(1, value))
-const smooth = (start, end, time) => {
-  const p = clamp((time - start) / (end - start))
-  return p * p * (3 - 2 * p)
-}
-const mix = (a, b, p) => a + (b - a) * p
+const {clamp, mix, smooth} = require('../shared/easing')
+
+const BURST_PEAK = 3.12
 
 const getFairyFrame = (elapsed, duration = 5, speed = 1) => {
   const time = Math.max(0, elapsed) * 5 / duration * speed
@@ -22,20 +19,22 @@ const getFairyFrame = (elapsed, duration = 5, speed = 1) => {
     circleAlpha: smooth(1.5, 1.65, time) * (1 - smooth(3.25, 4, time)),
     trailAlpha: smooth(1.5, 1.7, time) * (1 - smooth(2.85, 3.15, time)) +
       smooth(4, 4.15, time) * (1 - smooth(4.6, 4.9, time)) * 0.65,
-    burstAlpha: smooth(3, 3.12, time) * (1 - smooth(3.25, 4, time)),
+    burstAlpha: smooth(3, BURST_PEAK, time) * (1 - smooth(3.25, 4, time)),
     burstScale: mix(0.08, 0.5, smooth(3, 3.65, time)),
+    videoReady: time >= BURST_PEAK,
     messageAlpha: smooth(4, 4.6, time),
     messageScale: mix(0.75, 1, smooth(4, 5, time)),
   }
 }
 
-const getFairyPose = (frame, {pictureRatio, size, fairySize, useHoverPose}) => {
+const getFairyPose = (frame, {pictureRatio, size, fairySize, useHoverPose,
+  origin = {x: 0, y: -pictureRatio / (2 * size)}}) => {
   const hover = useHoverPose ? frame.hover : 0
   const width = fairySize * frame.scale
   const height = width * mix(1100 / 1005, 1100 / 940, hover)
-  const x = 0.5 / size + fairySize * 0.55 + 0.07 + (1 - frame.entrance) * 0.9
-  const y = -pictureRatio / size * 0.37 + 0.065 +
-    Math.sin(frame.entrance * Math.PI) * 0.3 + frame.bob
+  const x = mix(origin.x, 0.5 / size + fairySize * 0.55 + 0.07, frame.entrance)
+  const y = mix(origin.y, -pictureRatio / size * 0.37 + 0.065, frame.entrance) +
+    Math.sin(frame.entrance * Math.PI) * 0.24 + frame.bob
   // Art is mirrored toward the picture; normalized painted star centers differ
   // slightly between poses. Rotate this point with the complete sprite.
   const tipX = -0.34 * width

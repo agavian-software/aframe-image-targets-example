@@ -611,11 +611,11 @@ test('different matched targets keep their own effects when switching videos', a
   assert.equal(app.video.playCalls, 2)
 })
 
-test('gift design stays below the image, resizes, and preserves independent video and confetti controls', async () => {
+test('gift design centers on the image, waits for its name reveal, and replays after tracking loss', async () => {
   const app = createApp()
   await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: true,
     enableConfetti: false, bannerType: 0, bannerDesignType: 1,
-    bannerMessage: 'Happy Birthday Priya', bannerOptions: {duration: 7, size: 0.9, particleCount: 40,
+    bannerMessage: 'Happy Birthday Priya', bannerOptions: {name: 'Priya', duration: 7, size: 0.9, particleCount: 40,
       width: 99, assetBase: 'https://untrusted.example/', targetName: 'wrong'}}])
   const target = app.elements['magic-image-target']
   const gift = target.querySelector('.magic-gift-box')
@@ -623,22 +623,41 @@ test('gift design stays below the image, resizes, and preserves independent vide
   assert.equal(target.querySelector('.magic-birthday-banner'), null)
   const options = gift.attributes.get('magic-gift-box')
   assert.equal(options.text, 'Happy Birthday Priya')
+  assert.equal(options.name, 'Priya')
   assert.equal(options.targetName, 'gift')
   assert.equal(options.duration, 7)
   assert.equal(options.size, 0.9)
   assert.equal(options.particleCount, 40)
   assert.equal(options.width, 1.04)
+  assert.equal(options.pictureHeight, 1.04)
   assert.equal(options.assetBase, undefined)
   const video = app.plane().attributes.get('magic-target-video-cover')
-  assert.ok(gift.attributes.get('position').y <= -video.height / 2)
+  assert.equal(gift.attributes.get('position').y, 0)
+  assert.equal(video.revealOpacity, 0)
+  assert.equal(app.video.preload, 'auto')
+  assert.equal(app.video.playCalls, 0)
   await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
   assert.equal(gift.attributes.get('magic-gift-box').width, 2.08)
-  assert.ok(gift.object3D.position.y <= -app.plane().attributes.get('magic-target-video-cover').height / 2)
+  assert.equal(gift.attributes.get('magic-gift-box').boundsTop, 1.04)
+  assert.equal(gift.object3D.position.y, 0)
+  await gift.emit('magicvideorevealready', {targetName: 'other'})
+  assert.equal(app.video.playCalls, 0)
+  await gift.emit('magicvideorevealready', {targetName: 'gift'})
+  await gift.emit('magicvideorevealready', {targetName: 'gift'})
+  assert.equal(app.video.playCalls, 1)
   await app.elements.fullscreenToggle.emit('click')
   await app.elements.videoBackToTarget.emit('click')
   assert.equal(app.video.paused, false)
   assert.equal(app.video.playCalls, 1)
   assert.equal(app.plane().attributes.has('magic-target-confetti'), false)
+  app.video.currentTime = 3
+  await app.scene.emit('xrimagelost', {name: 'gift'})
+  assert.equal(app.video.paused, true)
+  assert.equal(app.video.currentTime, 0)
+  await app.scene.emit('xrimagefound', {name: 'gift'})
+  assert.equal(app.video.playCalls, 1)
+  await gift.emit('magicvideorevealready', {targetName: 'gift'})
+  assert.equal(app.video.playCalls, 2)
   await app.video.emit('ended')
   assert.equal(target.querySelector('.magic-gift-box'), null)
 })
@@ -650,6 +669,14 @@ test('disabled banners do not resolve the gift design or create its entity', asy
   assert.equal(app.elements['magic-image-target'].querySelector('.magic-banner-animation'), null)
   assert.equal(app.plane().attributes.get('magic-target-confetti').enabled, true)
   assert.equal(app.video.paused, false)
+})
+
+test('disabled gift options leave ordinary playback available', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', bannerType: 0, bannerDesignType: 1,
+    bannerOptions: {enabled: 'false'}}])
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 1)
+  assert.equal(app.video.playCalls, 1)
 })
 
 test('balloon names receive picture bounds and resize without changing video or other designs', async () => {
@@ -691,7 +718,7 @@ test('disabled banners skip the balloon registry and leave confetti independent'
   assert.equal(app.video.paused, false)
 })
 
-test('fairy bounds resize while video controls and all other designs keep their behavior', async () => {
+test('fairy bounds resize and video waits for each magic reveal', async () => {
   const app = createApp()
   await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', enableBanner: true,
     enableConfetti: false, bannerType: 0, bannerDesignType: 3, bannerMessage: 'Happy Birthday Priya',
@@ -706,16 +733,40 @@ test('fairy bounds resize while video controls and all other designs keep their 
   assert.equal(options.speed, 1.2)
   assert.equal(options.width, 1.04)
   assert.equal(options.pictureHeight, 1.04)
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 0)
+  assert.equal(app.video.preload, 'auto')
+  assert.equal(app.video.playCalls, 0)
   await app.scene.emit('xrimageupdated', {name: 'gift', scaledWidth: 2, scaledHeight: 2})
   assert.equal(fairy.attributes.get('magic-fairy-wand').width, 2.08)
   assert.equal(fairy.attributes.get('magic-fairy-wand').pictureHeight, 2.08)
   assert.equal(fairy.attributes.get('magic-fairy-wand').text, 'Happy Birthday Priya')
+  await fairy.emit('magicvideorevealready', {targetName: 'other'})
+  assert.equal(app.video.playCalls, 0)
+  await fairy.emit('magicvideorevealready', {targetName: 'gift'})
+  await fairy.emit('magicvideorevealready', {targetName: 'gift'})
+  assert.equal(app.video.playCalls, 1)
   await app.elements.fullscreenToggle.emit('click')
   await app.elements.videoBackToTarget.emit('click')
   assert.equal(app.video.paused, false)
   assert.equal(app.video.playCalls, 1)
+  app.video.currentTime = 3
+  await app.scene.emit('xrimagelost', {name: 'gift'})
+  assert.equal(app.video.paused, true)
+  assert.equal(app.video.currentTime, 0)
+  await app.scene.emit('xrimagefound', {name: 'gift'})
+  assert.equal(app.video.playCalls, 1)
+  await fairy.emit('magicvideorevealready', {targetName: 'gift'})
+  assert.equal(app.video.playCalls, 2)
   await app.video.emit('ended')
   assert.equal(target.querySelector('.magic-fairy-wand'), null)
+})
+
+test('disabled fairy options play on detection', async () => {
+  const app = createApp()
+  await app.start([{targetName: 'gift', videoUrl: 'gift.mp4', bannerType: 0, bannerDesignType: 3,
+    bannerOptions: {enabled: 'false'}}])
+  assert.equal(app.plane().attributes.get('magic-target-video-cover').revealOpacity, 1)
+  assert.equal(app.video.playCalls, 1)
 })
 
 test('interactive cake receives options below the picture and preserves video controls', async () => {

@@ -26,8 +26,25 @@ test('all seven categories are represented and unmapped pairs have no fallback',
   for (const design of [5, 15, 100]) assert.equal(getBannerAnimation(0, design), null)
 })
 
-test('category six / design one selects Santa without a video reveal gate', () => {
+test('category six / design one selects the New Year countdown without a video reveal gate', () => {
   const definition = getBannerAnimation('6', '1')
+  assert.equal(definition.id, 'new-year-2027-countdown')
+  assert.equal(definition.component, 'magic-new-year-2027-countdown')
+  assert.equal(Boolean(definition.revealsVideo || definition.defersVideoPlayback), false)
+  const {register, getPlacement, getOptions} = definition.load()
+  assert.equal(typeof register, 'function')
+  assert.equal(typeof getPlacement, 'function')
+  const options = getOptions({enabled: 'false', year: 2028, positions: {yearY: 0.2},
+    timings: {countdownSequence: 5}, scales: {bannerScale: 0.8}})
+  assert.equal(options.enabled, false)
+  assert.equal(options.year, '2028')
+  assert.equal(options.yearY, 0.2)
+  assert.equal(options.countdownSequence, 5)
+  assert.equal(options.bannerScale, 0.8)
+})
+
+test('category six / design two selects Santa without a video reveal gate', () => {
+  const definition = getBannerAnimation('6', '2')
   assert.equal(definition.id, 'santa-flying-reindeer')
   assert.equal(definition.component, 'magic-santa-flying-reindeer')
   assert.equal(Boolean(definition.revealsVideo || definition.defersVideoPlayback), false)
