@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const vm = require('node:vm')
 const {createRequire} = require('node:module')
-const {getMagicEntries} = require('../src/magic-entries')
+const magicEntries = require('../src/magic-entries')
 const videoMask = require('../src/video-mask')
 const {getBannerAnimation} = require('../src/animations/banner-registry')
 
@@ -48,13 +48,15 @@ class Element {
 }
 
 const createApp = ({play, fullscreen = 'standard', loadFailure = false,
-  resolveBannerAnimation = getBannerAnimation, search = ''} = {}) => {
+  resolveBannerAnimation = getBannerAnimation, search = '', lookupResult, playAudio} = {}) => {
   const ids = ['magic-video', 'videoPlayer', 'customLoader', 'scanOverlay', 'scanStatusText',
     'videoLoader', 'videoLoaderText', 'identificationTimeout', 'identificationTryAgain', 'timeoutTitle', 'timeoutMessage',
     'identificationExit', 'soundToggle', 'fullscreenToggle', 'videoMessage', 'videoMessageText',
-    'videoScanAgain', 'videoPlay', 'videoBackToTarget', 'magic-image-target']
+    'videoScanAgain', 'videoPlay', 'videoBackToTarget', 'magic-image-target',
+    'audioPlayer', 'magic-audio', 'audioArtwork', 'audioStatus', 'audioRetry']
   const elements = Object.fromEntries(ids.map(id => [id, new Element(
-    ['videoPlayer', 'soundToggle', 'fullscreenToggle', 'videoMessage', 'videoScanAgain', 'videoPlay', 'videoBackToTarget'].includes(id))]))
+    ['videoPlayer', 'soundToggle', 'fullscreenToggle', 'videoMessage', 'videoScanAgain', 'videoPlay', 'videoBackToTarget',
+      'audioPlayer', 'audioArtwork', 'audioRetry'].includes(id))]))
   Object.entries(elements).forEach(([id, element]) => { element.id = id })
   const video = elements['magic-video']
   video.playCalls = 0
@@ -68,6 +70,12 @@ const createApp = ({play, fullscreen = 'standard', loadFailure = false,
   video.pause = () => { video.paused = true }
   video.loadCalls = 0
   video.load = () => { video.loadCalls++ }
+  const audio = elements['magic-audio']
+  audio.play = async () => {
+    if (playAudio) await playAudio()
+    await audio.emit('playing')
+  }
+  audio.load = () => {}
   const fullscreenCalls = []
   if (fullscreen === 'standard') video.requestFullscreen = async () => fullscreenCalls.push('standard')
   if (fullscreen === 'ios') video.webkitEnterFullscreen = () => fullscreenCalls.push('ios')
@@ -97,6 +105,8 @@ const createApp = ({play, fullscreen = 'standard', loadFailure = false,
   const xr = {
     addCameraPipelineModule(module) { cameraModules.push(module.name) },
     XrController: {configure(value) { configurations.push(value) }},
+    stopped: false,
+    stop() { this.stopped = true },
   }
   const sandbox = {
     window, document, navigator: {userAgent: 'Chrome', platform: 'Win32', maxTouchPoints: 0},
@@ -111,6 +121,7 @@ const createApp = ({play, fullscreen = 'standard', loadFailure = false,
     fetch: async url => {
       requests.push(url)
       if (new URL(url, window.location.href).searchParams.has('customerCode')) {
+        if (lookupResult) return {ok: true, json: async () => ({response: lookupResult})}
         if (requests.length === 1) return {ok: false, status: 503}
         return {ok: true, json: async () => ({data: {response: {
           videoUrlV1: [{targetName: 'gift-by-code', videoUrl: 'videos/gift-by-code.mp4'}],
@@ -135,7 +146,8 @@ const createApp = ({play, fullscreen = 'standard', loadFailure = false,
   })
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/app'), 'utf8'), {
     ...sandbox,
-    require: name => name === './magic-entries' ? {getMagicEntries}
+    require: name => name === './magic-entries' ? magicEntries
+      : name === './audio-player' ? require('../src/audio-player')
       : name === './image-target-playback' ? targetModule.exports
       : name === './image-identification-pipeline' ? scannerModule.exports
       : name === './camera-focus' ? {cameraFocusPipelineModule: () => ({name: 'camera-focus'})} : {},
@@ -175,6 +187,7 @@ test('a code link looks up the gift before XR starts and retries the same code',
   assert.deepEqual(app.requests, [app.requests[0], app.requests[0]])
   assert.equal(app.elements.identificationTimeout.attributes.get('aria-hidden'), 'true')
   assert.deepEqual(app.configurations, [])
+  assert.equal(app.scene.attributes.has('xrweb'), true)
 
   await app.loadXR()
   await flush()
@@ -186,6 +199,52 @@ test('a code link looks up the gift before XR starts and retries the same code',
   await app.video.emit('ended')
   assert.equal(app.elements.videoPlay.hidden, false)
   assert.equal(app.requests.length, 3)
+})
+
+test('a code link opens audio with artwork even when XR never loads', async () => {
+  const lookupResult = {
+    audioMagic: true, audioUrl: 'https://media.example/message.mp3', imageUrl: 'https://media.example/gift.jpg',
+  }
+  const playAudio = async () => { throw Object.assign(new Error('Tap required'), {name: 'NotAllowedError'}) }
+  const app = createApp({search: '?code=CUS-DEADBEEF', lookupResult, playAudio})
+  await new Promise(resolve => setImmediate(resolve))
+  const {audioPlayer, audioArtwork, audioStatus, videoPlayer} = app.elements
+  const audio = app.elements['magic-audio']
+
+  assert.equal(app.requests.length, 1)
+  assert.equal(app.scene.attributes.has('xrweb'), false)
+  assert.equal(audioPlayer.hidden, false)
+  assert.equal(videoPlayer.hidden, true)
+  assert.equal(audio.src, lookupResult.audioUrl)
+  assert.equal(audioArtwork.src, lookupResult.imageUrl)
+  assert.equal(audioArtwork.hidden, false)
+  assert.equal(audioStatus.textContent, 'Press Play to listen.')
+  assert.equal(audioPlayer.classes.has('is-playing'), false)
+
+  await audio.emit('playing')
+  assert.equal(audioPlayer.classes.has('is-playing'), true)
+  await audio.emit('pause')
+  assert.equal(audioPlayer.classes.has('is-playing'), false)
+  assert.equal(audioArtwork.hidden, false)
+  await audio.emit('playing')
+  await audio.emit('ended')
+  assert.equal(audioPlayer.classes.has('is-playing'), false)
+  assert.equal(app.events.includes('imageidentificationresume'), false)
+})
+
+test('a scanned audio gift closes the camera and opens the same web player', async () => {
+  const app = createApp()
+  assert.equal(app.scene.attributes.has('xrweb'), true)
+  await app.window.emit('imageidentified', {audioMagic: true, videoUrlV1: [
+    {audioUrl: 'message.mp3', imageUrl: 'gift.jpg'},
+  ]})
+  assert.equal(app.scene.hidden, true)
+  assert.equal(app.window.XR8.stopped, true)
+  assert.equal(app.elements.audioPlayer.hidden, false)
+  assert.equal(app.elements.audioArtwork.hidden, false)
+  assert.equal(app.elements.scanOverlay.classes.has('is-hidden'), true)
+  assert.deepEqual(app.requests, [])
+  assert.equal(app.video.playCalls, 0)
 })
 
 test('matched video first plays on its tracked image and never opens the webpage player automatically', async () => {

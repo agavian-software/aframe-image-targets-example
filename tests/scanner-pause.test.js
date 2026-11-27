@@ -200,6 +200,23 @@ test('a direct customer code link uses HTTP and dispatches the match without cam
   assert.deepEqual(app.barcodeCalls, [])
 })
 
+test('HTTP lookups and camera matches dispatch audio-only gifts', async () => {
+  const audio = {audioMagic: true, audioUrl: 'gift.mp3', imageUrl: 'gift.jpg'}
+  const direct = createScanner({search: '?code=CUS-DEADBEEF'})
+  direct.reply(direct.requests[0], {response: audio})
+  await flush()
+  assert.deepEqual(direct.events.find(event => event.type === 'imageidentified')?.detail, audio)
+  assert.equal(direct.sockets.length, 0)
+
+  const camera = createScanner()
+  const [socket] = camera.sockets
+  socket.message({status: 'MATCHED', audioMagic: true, data: {videoUrl: 'gift.mp3', imageUrl: 'gift.jpg'}})
+  const result = camera.events.find(event => event.type === 'imageidentified')?.detail
+  assert.equal(result.audioMagic, true)
+  assert.equal(result.videoUrl, 'gift.mp3')
+  assert.equal(socket.readyState, 3)
+})
+
 test('pause aborts a direct customer code lookup and ignores its late response', async () => {
   const app = createScanner({search: '?code=gift'})
   assert.equal(app.requests.length, 1)

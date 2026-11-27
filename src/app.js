@@ -1,25 +1,13 @@
 require('./index.css')
 
-const {getMagicEntries} = require('./magic-entries')
+const {getMagicAudio, getMagicEntries} = require('./magic-entries')
+const {createAudioPlayer} = require('./audio-player')
 const {createImageTargetPlayback} = require('./image-target-playback')
 const {cameraFocusPipelineModule} = require('./camera-focus')
 const {getCustomerCodeFromUrl, imageIdentificationPipelineModule, startCustomerCodeIdentification} =
   require('./image-identification-pipeline')
 
 const customerCode = getCustomerCodeFromUrl()
-const xrReady = new Promise(resolve => {
-  const initializeXR = () => {
-    const {XR8} = window
-    XR8.addCameraPipelineModule(cameraFocusPipelineModule({
-      debug: new URLSearchParams(window.location.search).get('cameraDebug') === '1',
-    }))
-    if (!customerCode) XR8.addCameraPipelineModule(imageIdentificationPipelineModule())
-    XR8.XrController.configure({imageTargetData: []})
-    resolve()
-  }
-  if (window.XR8) initializeXR()
-  else window.addEventListener('xrloaded', initializeXR, {once: true})
-})
 
 document.addEventListener('DOMContentLoaded', () => {
   const scene = document.querySelector('a-scene')
@@ -42,6 +30,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const backButton = document.querySelector('#videoBackToTarget')
 
   if (!scene || !video || !player || !appLoader || !videoLoader || !videoLoaderText) return
+
+  const audioPlayer = createAudioPlayer(document)
+  let xrReady
+  const startCamera = () => {
+    if (xrReady) return xrReady
+    xrReady = new Promise(resolve => {
+      const initializeXR = () => {
+        const {XR8} = window
+        XR8.addCameraPipelineModule(cameraFocusPipelineModule({
+          debug: new URLSearchParams(window.location.search).get('cameraDebug') === '1',
+        }))
+        if (!customerCode) XR8.addCameraPipelineModule(imageIdentificationPipelineModule())
+        XR8.XrController.configure({imageTargetData: []})
+        resolve()
+      }
+      if (window.XR8) initializeXR()
+      else window.addEventListener('xrloaded', initializeXR, {once: true})
+    })
+    scene.setAttribute('xrweb', 'allowedDevices: any; disableWorldTracking: true')
+    return xrReady
+  }
 
   let hasActiveVideo = false
   let playbackRequest = 0
@@ -258,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   const showIdentificationFailure = () => {
-    if (hasActiveVideo) return
+    if (hasActiveVideo || audioPlayer.isOpen()) return
     if (customerCode) hideAppLoader()
     scanOverlay?.classList.add('is-hidden')
     timeoutOverlay?.classList.add('is-visible')
@@ -275,17 +284,27 @@ document.addEventListener('DOMContentLoaded', () => {
   exitButton?.addEventListener('click', () => window.location.assign('https://www.sisulogs.com/'))
 
   window.addEventListener('imageidentified', async (event) => {
-    if (hasActiveVideo) return
-    const entries = getMagicEntries(event.detail)
-    if (!entries.length) return
+    if (hasActiveVideo || audioPlayer.isOpen()) return
+    const audioGift = getMagicAudio(event.detail)
+    const entries = audioGift ? [] : getMagicEntries(event.detail)
+    if (!audioGift && !entries.length) return
 
-    hasActiveVideo = true
-    const request = ++playbackRequest
     window.dispatchEvent(new Event('imageidentificationpause'))
     hideAppLoader()
     scanOverlay?.classList.add('is-hidden')
     timeoutOverlay?.classList.remove('is-visible')
     timeoutOverlay?.setAttribute('aria-hidden', 'true')
+
+    if (audioGift) {
+      scene.hidden = true
+      document.body.classList.add('is-playing-audio')
+      audioPlayer.open(audioGift)
+      if (!customerCode) window.XR8?.stop?.()
+      return
+    }
+
+    hasActiveVideo = true
+    const request = ++playbackRequest
     document.body.classList.add('is-playing-video')
     // Keep the webpage player hidden until the viewer clicks Fullscreen.
     player.hidden = true
@@ -293,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showVideoLoader('Loading matched experience...')
 
     try {
-      if (customerCode) await xrReady
+      if (customerCode) await startCamera()
       if (request !== playbackRequest) return
       await targetPlayback.load(entries)
       if (request !== playbackRequest) return
@@ -309,6 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   if (customerCode) startCustomerCodeIdentification(customerCode)
+  else startCamera()
 
   async function startTargetVideo({targetName, videoUrl, defersVideoPlayback, videoRevealReady}) {
     if (!hasActiveVideo || webpagePlayback) return

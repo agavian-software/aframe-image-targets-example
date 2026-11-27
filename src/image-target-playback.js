@@ -3,18 +3,7 @@ const {getShapeVideoScale, getTrackedTargetSize, getTargetVideoLayout} = require
 const {registerMagicTargetVideoCover} = require('./video-cover')
 const {registerMagicTargetConfetti} = require('./target-confetti')
 const {getBannerAnimation} = require('./animations/banner-registry')
-
-const MAGIC_CDN_BASE = 'https://d1y2o0xoe5yirl.cloudfront.net'
-
-const isAbsoluteUrl = value => /^https?:\/\//i.test(value || '')
-
-const joinUrl = (base, value) => {
-  if (!value) return ''
-  if (isAbsoluteUrl(value)) return value
-  return `${String(base).replace(/\/$/, '')}/${String(value).replace(/^\//, '')}`
-}
-
-const normalizeTargetName = value => String(value || '').replace(/\.json$/i, '')
+const {joinUrl, normalizeTargetName, resolveMagicAssetUrl} = require('./magic-assets')
 
 const DEFAULT_TARGET_SIZE = {width: 0.79, height: 1}
 const SHAPE_VIDEO_SCALE = getShapeVideoScale(new URLSearchParams(window.location.search).get('shapeScale'))
@@ -59,7 +48,7 @@ const bindImageTargetName = (target, targetName) => {
 }
 
 const loadImageTarget = (entry) => {
-  const assetRoot = joinUrl(MAGIC_CDN_BASE, entry.path || '')
+  const assetRoot = resolveMagicAssetUrl(entry.path)
   const targetName = normalizeTargetName(entry.targetName)
   const targetJsonUrl = joinUrl(assetRoot, `${targetName}.json`)
 
@@ -80,7 +69,7 @@ const loadImageTarget = (entry) => {
         luminanceImage: joinUrl(assetRoot, `${targetName}_luminance.jpg`),
       })
 
-      const maskConfig = getVideoMaskConfig(entry, value => joinUrl(MAGIC_CDN_BASE, value))
+      const maskConfig = getVideoMaskConfig(entry, resolveMagicAssetUrl)
       // Recognition luminance images may be resized to 480x640. Use the
       // actual tracking crop for the initial aspect, not that raster size.
       return getTargetSize(targetData.resources.croppedImage).then((targetSize) => {
@@ -90,7 +79,7 @@ const loadImageTarget = (entry) => {
           targetName,
           targetSize,
           maskConfig: preparedConfig,
-          videoUrl: joinUrl(MAGIC_CDN_BASE, entry.videoUrl),
+          videoUrl: resolveMagicAssetUrl(entry.videoUrl),
           enableConfetti: entry.enableConfetti ?? true,
           decorType: entry.decorType ?? 0,
           enableBanner: entry.enableBanner ?? true,

@@ -61,7 +61,7 @@
       <div class="brandMark" aria-hidden="true">
         <span></span>
       </div>
-      <div class="loaderTitle">Preparing your Magic Video</div>
+      <div class="loaderTitle">Preparing your gift</div>
       <div class="loadingTrack" aria-hidden="true"><span></span></div>
     </div>
   </div>
@@ -82,8 +82,7 @@
   </div>
 
   <a-scene xrextras-gesture-detector xrextras-runtime-error
-    renderer="colorManagement:true"
-    xrweb="allowedDevices: any; disableWorldTracking: true">
+    renderer="colorManagement:true" vr-mode-ui="enabled: false">
 
     <a-camera position="0 4 10" raycaster="objects: .cantap" cursor="fuse: false; rayOrigin: mouse;">
     </a-camera>
@@ -99,6 +98,25 @@
   <main id="videoPlayer" class="videoPlayer" aria-label="Your gift video" hidden>
     <video id="magic-video" muted playsinline preload="metadata" crossorigin="anonymous"></video>
   </main>
+
+  <main id="audioPlayer" class="audioPlayer" aria-labelledby="audioTitle" hidden>
+    <div class="audioCard">
+      <div class="audioCover">
+        <span class="audioNote" aria-hidden="true">&#9835;</span>
+        <img id="audioArtwork" class="audioArtwork" alt="Gift image" hidden>
+      </div>
+      <div class="audioHeading">
+        <h1 id="audioTitle">Audio message</h1>
+        <div class="audioBars" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <audio id="magic-audio" controls preload="metadata" aria-label="Gift audio playback"></audio>
+      <p id="audioStatus" class="audioStatus" role="status"></p>
+      <button id="audioRetry" class="timeoutButton timeoutButtonPrimary" type="button" hidden>Try again</button>
+    </div>
+  </main>
+
   <div id="videoMessage" class="videoMessage" role="status" aria-live="polite" hidden>
     <p id="videoMessageText"></p>
     <button id="videoPlay" class="timeoutButton timeoutButtonPrimary" type="button" hidden>Play</button>

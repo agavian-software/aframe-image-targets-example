@@ -1,5 +1,5 @@
 const {createWorkerJpegEncoder} = require('./scanner-jpeg-encoder')
-const {getMagicEntries} = require('./magic-entries')
+const {getMagicAudio, getMagicEntries} = require('./magic-entries')
 
 const DEFAULT_IDENTIFICATION_TIMEOUT_MS = 30000
 const DEFAULT_WS_URL = 'wss://backend.agavian.in/magic/ws/magic-scan'
@@ -409,14 +409,17 @@ const analyzeFrameQuality = (
   }
 }
 
-const unwrapMagicResponse = (body) =>
-  body?.response ||
-  body?.data?.response ||
-  body?.data?.data?.response ||
-  body?.magic?.response ||
-  body?.payload?.response ||
-  body?.data ||
-  body
+const unwrapMagicResponse = (body) => {
+  const response = body?.response || body?.data?.response || body?.data?.data?.response ||
+    body?.magic?.response || body?.payload?.response || body?.data || body
+  const audioMagic = body?.data?.audioMagic ?? body?.audioMagic
+  if (audioMagic != null && response && typeof response === 'object' && response.audioMagic == null) {
+    return {...response, audioMagic}
+  }
+  return response
+}
+
+const hasPlayableMagic = response => Boolean(getMagicAudio(response) || getMagicEntries(response).length)
 
 const startCustomerCodeIdentification = (customerCode) => {
   const config = getRuntimeConfig()
@@ -449,7 +452,7 @@ const startCustomerCodeIdentification = (customerCode) => {
       if (!response.ok) throw new Error(`Customer lookup returned HTTP ${response.status}.`)
       const body = unwrapMagicResponse(await response.json())
       if (controller.signal.aborted) return
-      if (!getMagicEntries(body).length) throw new Error('Customer lookup returned no playable image targets.')
+      if (!hasPlayableMagic(body)) throw new Error('Customer lookup returned no playable gift media.')
 
       window.clearTimeout(timeout)
       pendingLookup = null
@@ -464,13 +467,6 @@ const startCustomerCodeIdentification = (customerCode) => {
   window.addEventListener('imageidentificationpause', cancelLookup)
   window.addEventListener('imageidentificationresume', lookup)
   lookup()
-}
-
-const hasMatchedVideo = (body) => {
-  const response = unwrapMagicResponse(body)
-  return Array.isArray(response?.videoUrlV1)
-    ? response.videoUrlV1.length > 0
-    : Boolean(response?.videoUrlV1)
 }
 
 const imageIdentificationPipelineModule = () => {
@@ -655,8 +651,8 @@ const imageIdentificationPipelineModule = () => {
     if (identificationSuspended || matchFound || timedOut) return
     const response = unwrapMagicResponse(payload)
 
-    if (!hasMatchedVideo(response)) {
-      console.warn('[image-identification] MATCHED received without videoUrlV1:', payload)
+    if (!hasPlayableMagic(response)) {
+      console.warn('[image-identification] MATCHED received without playable gift media.')
       return
     }
 

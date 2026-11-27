@@ -1,9 +1,29 @@
 const {test} = require('node:test')
 const assert = require('node:assert/strict')
-const {getMagicEntries} = require('../src/magic-entries')
+const {getMagicAudio, getMagicEntries} = require('../src/magic-entries')
 const {getVideoMaskConfig, getVideoSurfaceSize} = require('../src/video-mask')
 
 const videoEntry = {targetName: 'gift', videoUrl: 'portrait.mp4'}
+
+test('audio gifts use their explicit audio and cover, including legacy audio entries', () => {
+  const audio = {audioUrl: 'https://example.test/song.mp3', imageUrl: 'https://example.test/cover.jpg'}
+  assert.deepEqual(getMagicAudio({audioMagic: true, ...audio}), audio)
+  assert.deepEqual(getMagicAudio({videoUrlV1: [videoEntry, {audio: audio.audioUrl, coverUrl: audio.imageUrl}]}), audio)
+  assert.deepEqual(getMagicAudio({audioMagic: true, videoUrlV1: [
+    videoEntry, {audioUrl: audio.audioUrl, thumbnailUrl: audio.imageUrl},
+  ]}), audio)
+  assert.equal(getMagicAudio({audioMagic: false, ...audio}), null)
+  assert.equal(getMagicAudio({videoUrlV1: [videoEntry]}), null)
+})
+
+test('flagged audio can use the media entry URL and its target image', () => {
+  assert.deepEqual(getMagicAudio({videoUrlV1: {
+    audioMagic: true, videoUrl: 'songs/gift.mp3', targetName: 'gift.json', path: 'targets/123',
+  }}), {
+    audioUrl: 'https://d1y2o0xoe5yirl.cloudfront.net/songs/gift.mp3',
+    imageUrl: 'https://d1y2o0xoe5yirl.cloudfront.net/targets/123/gift_original.jpg',
+  })
+})
 
 test('shape ID 9 inherits response custom mask URLs for array and single video entries', () => {
   for (const frameShape of [9, '9']) {
